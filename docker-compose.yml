@@ -15,6 +15,9 @@ services:
       - QUIESCENCE_MINUTES=5
       - MAX_COMMIT_INTERVAL_MINUTES=60
       - GIT_REMOTE_URL=
+      - OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}
+      - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}
+      - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}
     volumes:
       - wiki_main_data:/app/wiki
     restart: unless-stopped
@@ -34,6 +37,9 @@ services:
       - QUIESCENCE_MINUTES=5
       - MAX_COMMIT_INTERVAL_MINUTES=60
       - GIT_REMOTE_URL=
+      - OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}
+      - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}
+      - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}
     volumes:
       - wiki_sandbox_data:/app/wiki
     restart: unless-stopped

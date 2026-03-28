@@ -15,6 +15,10 @@ function hasAdminAccess(role) {
   return role === 'admin';
 }
 
+function isPendingRole(role) {
+  return role === 'pending';
+}
+
 function toPublicUser(user) {
   if (!user) {
     return null;
@@ -24,6 +28,9 @@ function toPublicUser(user) {
     username: user.username,
     role: user.role || 'writer',
     isActive: user.isActive === true,
+    oauthProvider: user.oauthProvider || null,
+    email: user.email || null,
+    displayName: user.displayName || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   };
@@ -75,7 +82,7 @@ class UserStore {
 
   static normalizeRole(role) {
     const normalized = String(role || 'writer').trim().toLowerCase();
-    if (!['reader', 'writer', 'admin'].includes(normalized)) {
+    if (!['pending', 'reader', 'writer', 'admin'].includes(normalized)) {
       throw new Error(`Unsupported role: ${role}`);
     }
 
@@ -113,6 +120,25 @@ class UserStore {
       );
       CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
     `);
+
+    this.migrateOAuthColumns();
+  }
+
+  migrateOAuthColumns() {
+    const columns = ['oauth_provider', 'oauth_id', 'email', 'display_name'];
+    for (const col of columns) {
+      try {
+        this.sqliteQuery(`ALTER TABLE users ADD COLUMN ${col} TEXT DEFAULT NULL;`);
+      } catch {
+        // Column already exists — safe to ignore
+      }
+    }
+
+    this.sqliteQuery(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth
+      ON users(oauth_provider, oauth_id)
+      WHERE oauth_provider IS NOT NULL;
+    `);
   }
 
   bootstrapIfEmpty() {
@@ -146,7 +172,8 @@ class UserStore {
     }
 
     const row = this.sqliteQuery(`
-      SELECT username, password_hash, role, is_active, created_at, updated_at
+      SELECT username, password_hash, role, is_active, created_at, updated_at,
+             oauth_provider, oauth_id, email, display_name
       FROM users
       WHERE username = ${sqlLiteral(username)}
       LIMIT 1;
@@ -156,12 +183,17 @@ class UserStore {
       return null;
     }
 
-    const [userNameValue, passwordHash, role, isActiveText, createdAt, updatedAt] = row.split('\t');
+    const [userNameValue, passwordHash, role, isActiveText, createdAt, updatedAt,
+           oauthProvider, oauthId, email, displayName] = row.split('\t');
     return {
       username: userNameValue,
       passwordHash,
       role: role || 'writer',
       isActive: isActiveText === '1',
+      oauthProvider: oauthProvider || null,
+      oauthId: oauthId || null,
+      email: email || null,
+      displayName: displayName || null,
       createdAt,
       updatedAt
     };
@@ -191,7 +223,8 @@ class UserStore {
 
   listUsers() {
     const output = this.sqliteQuery(`
-      SELECT username, role, is_active, created_at, updated_at
+      SELECT username, role, is_active, created_at, updated_at,
+             oauth_provider, email, display_name
       FROM users
       ORDER BY username ASC;
     `);
@@ -201,11 +234,15 @@ class UserStore {
     }
 
     return output.split(/\r?\n/).filter(Boolean).map((line) => {
-      const [username, role, isActiveText, createdAt, updatedAt] = line.split('\t');
+      const [username, role, isActiveText, createdAt, updatedAt,
+             oauthProvider, email, displayName] = line.split('\t');
       return {
         username,
         role: role || 'writer',
         isActive: isActiveText === '1',
+        oauthProvider: oauthProvider || null,
+        email: email || null,
+        displayName: displayName || null,
         createdAt,
         updatedAt
       };
@@ -339,6 +376,67 @@ class UserStore {
     return toPublicUser(existingUser);
   }
 
+  findByOAuth(provider, oauthId) {
+    if (!provider || !oauthId) {
+      return null;
+    }
+
+    const row = this.sqliteQuery(`
+      SELECT username, password_hash, role, is_active, created_at, updated_at,
+             oauth_provider, oauth_id, email, display_name
+      FROM users
+      WHERE oauth_provider = ${sqlLiteral(provider)}
+        AND oauth_id = ${sqlLiteral(oauthId)}
+      LIMIT 1;
+    `);
+
+    if (!row) {
+      return null;
+    }
+
+    const [username, passwordHash, role, isActiveText, createdAt, updatedAt,
+           oauthProvider, oauthIdVal, email, displayName] = row.split('\t');
+    return {
+      username,
+      passwordHash,
+      role: role || 'writer',
+      isActive: isActiveText === '1',
+      oauthProvider: oauthProvider || null,
+      oauthId: oauthIdVal || null,
+      email: email || null,
+      displayName: displayName || null,
+      createdAt,
+      updatedAt
+    };
+  }
+
+  createOAuthUser({ provider, oauthId, email, displayName }) {
+    if (!provider || !oauthId) {
+      throw new Error('OAuth provider and ID are required');
+    }
+
+    const username = `${provider}:${oauthId}`;
+    const placeholderHash = 'oauth-no-password';
+
+    this.sqliteQuery(`
+      INSERT INTO users (username, password_hash, role, is_active,
+                         oauth_provider, oauth_id, email, display_name, updated_at)
+      VALUES (
+        ${sqlLiteral(username)},
+        ${sqlLiteral(placeholderHash)},
+        'pending',
+        1,
+        ${sqlLiteral(provider)},
+        ${sqlLiteral(oauthId)},
+        ${sqlLiteral(email || '')},
+        ${sqlLiteral(displayName || '')},
+        datetime('now')
+      );
+    `);
+
+    return toPublicUser(this.getUserByUsername(username));
+  }
+
   validateCredentials(username, password) {
     const user = this.getUserByUsername(username);
     if (!user || !user.isActive) {
@@ -359,5 +457,6 @@ class UserStore {
 module.exports = {
   hasAdminAccess,
   hasWriteAccess,
+  isPendingRole,
   UserStore
 };

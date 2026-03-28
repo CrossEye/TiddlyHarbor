@@ -82,6 +82,7 @@ const PAGE_STYLES = `
   .badge-admin  { background:#0f2b44; color:#5dade2; }
   .badge-writer { background:#1a5276; color:#e8e8e8; }
   .badge-reader { background:#dce6f0; color:#1a3a5c; border:1px solid #94a3b8; }
+  .badge-pending { background:#fef3cd; color:#856404; border:1px solid #f0d86e; }
   .badge-active   { background:#d0f0e0; color:#0a3d24; }
   .badge-disabled { background:#fde0e3; color:#5c0a12; }
 
@@ -128,12 +129,44 @@ function pageShell(title, body) {
 </html>`;
 }
 
-function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath }) {
+const OAUTH_BUTTON_STYLES = {
+  github: { bg: '#24292e', hover: '#1b1f23', icon: `<svg viewBox="0 0 16 16" width="18" height="18" fill="#fff" style="vertical-align:middle;margin-right:0.5rem;"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>` }
+};
+
+function renderOAuthButtons(providers, sitePrefix, nextPath) {
+  if (!providers || providers.length === 0) {
+    return '';
+  }
+
+  const nextQuery = nextPath ? `?next=${encodeURIComponent(nextPath)}` : '';
+  const buttons = providers.map((p) => {
+    const style = OAUTH_BUTTON_STYLES[p.name] || { bg: '#333', hover: '#222', icon: '' };
+    return `<a href="${sitePrefix}/auth/${escapeHtml(p.name)}${nextQuery}"
+               class="btn" style="display:flex;align-items:center;justify-content:center;
+               width:100%;padding:0.75rem;font-size:1rem;background:${style.bg};color:#fff;
+               text-decoration:none;margin-bottom:0.5rem;"
+               onmouseover="this.style.background='${style.hover}'"
+               onmouseout="this.style.background='${style.bg}'">
+              ${style.icon}Sign in with ${escapeHtml(p.displayName || p.name)}
+            </a>`;
+  }).join('');
+
+  return `
+    <div style="margin:1.25rem 0 0.75rem;display:flex;align-items:center;gap:0.75rem;">
+      <hr style="flex:1;border:none;border-top:1px solid #b8cfe0;">
+      <span style="color:#5d6d7e;font-size:0.8rem;white-space:nowrap;">or sign in with</span>
+      <hr style="flex:1;border:none;border-top:1px solid #b8cfe0;">
+    </div>
+    ${buttons}`;
+}
+
+function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath, enabledProviders }) {
   const safeError = errorMessage
     ? `<div class="alert alert-error">${escapeHtml(errorMessage)}</div>`
     : '';
   const safeNextPath = nextPath ? escapeHtml(nextPath) : '';
   const hiddenNext = safeNextPath ? `<input name="next" type="hidden" value="${safeNextPath}">` : '';
+  const oauthButtons = renderOAuthButtons(enabledProviders, sitePrefix, nextPath);
 
   const body = `
     <header class="th-header">
@@ -154,6 +187,7 @@ function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath })
           <input id="password" name="password" type="password" autocomplete="current-password">
           <button type="submit" class="btn btn-primary" style="width:100%;padding:0.75rem;font-size:1rem;">Sign In</button>
         </form>
+        ${oauthButtons}
         <p style="margin-top:1.25rem;font-size:0.875rem;">
           <a href="${sitePrefix}/" style="color:#2e86ab;">← Back to wiki</a>
         </p>
@@ -171,29 +205,39 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
     ? `<div class="alert alert-error">${escapeHtml(errorMessage)}</div>`
     : '';
 
-  const rows = users.map((user) => {
+  const pendingUsers = users.filter((u) => u.role === 'pending');
+  const allUsers = users;
+
+  function userRow(user) {
     const isSelf = currentUser && user.username === currentUser.username;
     const disableSelfAttr = isSelf ? 'disabled' : '';
     const activeOptionTrue  = user.isActive  ? 'selected' : '';
     const activeOptionFalse = !user.isActive ? 'selected' : '';
+    const pendingSelected = user.role === 'pending' ? 'selected' : '';
     const readerSelected = user.role === 'reader' ? 'selected' : '';
     const writerSelected = user.role === 'writer' ? 'selected' : '';
     const adminSelected  = user.role === 'admin'  ? 'selected' : '';
 
-    const roleBadge   = `<span class="badge badge-${escapeHtml(user.role)}">${escapeHtml(user.role)}</span>`;
-    const statusBadge = user.isActive
-      ? `<span class="badge badge-active">active</span>`
-      : `<span class="badge badge-disabled">disabled</span>`;
     const selfNote = isSelf ? `<span class="self-note">(you)</span>` : '';
+    const providerInfo = user.oauthProvider
+      ? `<span style="color:#5d6d7e;font-size:0.75rem;display:block;">${escapeHtml(user.oauthProvider)}</span>`
+      : '';
+    const emailInfo = user.email
+      ? `<span style="color:#5d6d7e;font-size:0.75rem;display:block;">${escapeHtml(user.email)}</span>`
+      : '';
 
     return `
       <tr>
-        <td><strong>${escapeHtml(user.username)}</strong>${selfNote}</td>
+        <td>
+          <strong>${escapeHtml(user.displayName || user.username)}</strong>${selfNote}
+          ${providerInfo}${emailInfo}
+        </td>
         <td>
           <form method="post" action="${sitePrefix}/admin" class="inline-form">
             <input type="hidden" name="action" value="set-role">
             <input type="hidden" name="username" value="${escapeHtml(user.username)}">
             <select name="role" ${disableSelfAttr}>
+              <option value="pending" ${pendingSelected}>pending</option>
               <option value="reader" ${readerSelected}>reader</option>
               <option value="writer" ${writerSelected}>writer</option>
               <option value="admin"  ${adminSelected}>admin</option>
@@ -228,7 +272,40 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
           </form>
         </td>
       </tr>`;
-  }).join('');
+  }
+
+  const rows = allUsers.map(userRow).join('');
+
+  const pendingSection = pendingUsers.length > 0 ? `
+      <div class="th-section" style="border-left:4px solid #f0d86e;">
+        <h2>Pending Approvals (${pendingUsers.length})</h2>
+        <p style="margin:0.25rem 0 0.75rem;color:#5d6d7e;font-size:0.85rem;">
+          These users signed in via OAuth and are awaiting approval.
+        </p>
+        ${pendingUsers.map((u) => {
+          const display = u.displayName || u.username;
+          const emailNote = u.email ? ` (${escapeHtml(u.email)})` : '';
+          const providerNote = u.oauthProvider ? `via ${escapeHtml(u.oauthProvider)}` : '';
+          return `
+            <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid #e8e8e8;">
+              <div style="flex:1;">
+                <strong>${escapeHtml(display)}</strong>${emailNote}
+                <span style="color:#5d6d7e;font-size:0.78rem;margin-left:0.5rem;">${providerNote}</span>
+              </div>
+              <form method="post" action="${sitePrefix}/admin" class="inline-form">
+                <input type="hidden" name="action" value="set-role">
+                <input type="hidden" name="username" value="${escapeHtml(u.username)}">
+                <input type="hidden" name="role" value="writer">
+                <button type="submit" class="btn btn-sm btn-primary">Approve</button>
+              </form>
+              <form method="post" action="${sitePrefix}/admin" class="inline-form">
+                <input type="hidden" name="action" value="delete-user">
+                <input type="hidden" name="username" value="${escapeHtml(u.username)}">
+                <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+              </form>
+            </div>`;
+        }).join('')}
+      </div>` : '';
 
   const body = `
     <header class="th-header">
@@ -247,6 +324,7 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
         </p>
       </div>
       ${safeMessage}${safeError}
+      ${pendingSection}
       <div class="th-section">
         <h2>Add New User</h2>
         <form method="post" action="${sitePrefix}/admin"

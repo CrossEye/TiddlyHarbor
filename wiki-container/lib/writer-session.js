@@ -21,7 +21,7 @@ function signPayload(payload) {
 }
 
 function normalizeRole(role) {
-  return role === 'admin' || role === 'reader' || role === 'writer'
+  return role === 'admin' || role === 'reader' || role === 'writer' || role === 'pending'
     ? role
     : 'writer';
 }

@@ -60,7 +60,10 @@ function buildCompose(config) {
         `GIT_AUTOPUSH=${toEnvValue(site.git_autopush ?? config.defaults.git_autopush ?? false)}`,
         `QUIESCENCE_MINUTES=${toEnvValue(site.quiescence_minutes ?? config.defaults.quiescence_minutes ?? 5)}`,
         `MAX_COMMIT_INTERVAL_MINUTES=${toEnvValue(site.max_commit_interval_minutes ?? config.defaults.max_commit_interval_minutes ?? 60)}`,
-        `GIT_REMOTE_URL=${site.repo || ''}`
+        `GIT_REMOTE_URL=${site.repo || ''}`,
+        'OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}',
+        'OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}',
+        'OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}'
       ],
       volumes: [`${volumeName}:/app/wiki`],
       restart: 'unless-stopped'

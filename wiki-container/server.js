@@ -8,6 +8,9 @@ const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
 const { GitSync } = require('./lib/git-sync');
 const { hasAdminAccess, hasWriteAccess, UserStore } = require('./lib/user-store');
+const { getEnabledProviders } = require('./lib/oauth-config');
+const { initializeStrategies, passport } = require('./lib/oauth-strategies');
+const { buildExpiredOAuthStateCookie, buildOAuthStateCookie, readOAuthStateCookie } = require('./lib/oauth-state');
 const tiddlyWikiVersion = require('tiddlywiki/package.json').version;
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -32,6 +35,14 @@ try {
   console.error('UserStore initialization failed:', err.message);
 }
 
+const enabledOAuthProviders = getEnabledProviders();
+if (enabledOAuthProviders.length > 0) {
+  initializeStrategies(enabledOAuthProviders, sitePrefix);
+  console.log(`OAuth providers enabled: ${enabledOAuthProviders.map((p) => p.name).join(', ')}`);
+} else {
+  console.log('No OAuth providers configured — password-only auth');
+}
+
 const gitSync = new GitSync(wikiPath, {
   enabled: process.env.GIT_AUTOSAVE_ENABLED !== 'false',
   autoPush: process.env.GIT_AUTOPUSH === 'true',
@@ -49,6 +60,7 @@ const twProcess = startTiddlyWiki(wikiPath, twPort, wikiName);
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(passport.initialize());
 
 function getRequesterIp(req) {
   const xff = req.get('X-Forwarded-For');
@@ -299,11 +311,19 @@ app.get([`${sitePrefix}/login`, '/login'], (req, res) => {
     return res.redirect(nextPath);
   }
 
+  const errorMessages = {
+    invalid: 'Incorrect username or password.',
+    oauth: 'OAuth sign-in failed. Please try again.',
+    disabled: 'Your account is disabled. Contact an admin.',
+    pending: 'Your account is pending admin approval.'
+  };
+
   return res.status(200).send(renderWriterLoginPage({
     wikiName,
     sitePrefix,
     nextPath,
-    errorMessage: req.query.error === 'invalid' ? 'Incorrect username or password.' : ''
+    enabledProviders: enabledOAuthProviders,
+    errorMessage: errorMessages[req.query.error] || ''
   }));
 });
 
@@ -346,6 +366,81 @@ app.post([`${sitePrefix}/logout`, '/logout'], (req, res) => {
 
 app.get([`${sitePrefix}/logout`, '/logout'], (req, res) => {
   return completeWriterLogout(req, res, req.query.next || `${sitePrefix}/`);
+});
+
+// ── OAuth routes ──────────────────────────────────────────────────────────
+
+app.get([`${sitePrefix}/auth/:provider`, '/auth/:provider'], (req, res, next) => {
+  const providerName = req.params.provider;
+  const provider = enabledOAuthProviders.find((p) => p.name === providerName);
+  if (!provider) {
+    return res.status(404).send('OAuth provider not configured.');
+  }
+
+  const nextPath = getSafeNextPath(req.query.next || `${sitePrefix}/`);
+  const stateCookie = buildOAuthStateCookie(sitePrefix, nextPath);
+
+  res.setHeader('Set-Cookie', stateCookie.header);
+
+  return passport.authenticate(providerName, {
+    session: false,
+    state: stateCookie.state,
+    scope: provider.scope || []
+  })(req, res, next);
+});
+
+app.get([`${sitePrefix}/auth/:provider/callback`, '/auth/:provider/callback'], (req, res, next) => {
+  const providerName = req.params.provider;
+  const provider = enabledOAuthProviders.find((p) => p.name === providerName);
+  if (!provider) {
+    return res.status(404).send('OAuth provider not configured.');
+  }
+
+  const savedState = readOAuthStateCookie(req, sitePrefix);
+  if (!savedState || savedState.state !== req.query.state) {
+    return res.status(403).send('OAuth state mismatch — please try again.');
+  }
+
+  passport.authenticate(providerName, { session: false }, (err, oauthProfile) => {
+    // Clear the state cookie regardless of outcome
+    res.setHeader('Set-Cookie', buildExpiredOAuthStateCookie(sitePrefix));
+
+    if (err || !oauthProfile) {
+      console.error(`OAuth callback error (${providerName}):`, err?.message || 'no profile');
+      return res.redirect(`${sitePrefix}/login?error=oauth`);
+    }
+
+    // Look up or create the user
+    let user = userStore.findByOAuth(oauthProfile.provider, oauthProfile.oauthId);
+    if (!user) {
+      try {
+        user = userStore.createOAuthUser({
+          provider: oauthProfile.provider,
+          oauthId: oauthProfile.oauthId,
+          email: oauthProfile.email,
+          displayName: oauthProfile.displayName
+        });
+        console.log(`New OAuth user created: ${user.username} (${oauthProfile.provider}) — pending approval`);
+      } catch (createErr) {
+        console.error(`Failed to create OAuth user:`, createErr.message);
+        return res.redirect(`${sitePrefix}/login?error=oauth`);
+      }
+    }
+
+    if (!user.isActive) {
+      return res.redirect(`${sitePrefix}/login?error=disabled`);
+    }
+
+    if (user.role === 'pending') {
+      return res.redirect(`${sitePrefix}/login?error=pending`);
+    }
+
+    // Set session cookie and redirect
+    return completeWriterLogin(req, res, savedState.next, {
+      username: user.username,
+      role: user.role
+    });
+  })(req, res, next);
 });
 
 app.get([`${sitePrefix}/status`, '/status'], (req, res) => {
