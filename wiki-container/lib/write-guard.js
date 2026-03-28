@@ -59,11 +59,14 @@ function isBenignAnonymousStateWrite(effectivePath) {
   return { benign, title };
 }
 
-function requireBasicWriteAuth() {
+function requireBasicWriteAuth(options = {}) {
   const expectedUser = process.env.BASIC_AUTH_USER || 'admin';
   const expectedPass = process.env.BASIC_AUTH_PASS || 'change-me';
   const wikiName = process.env.WIKI_NAME || 'main';
   const sitePrefix = `/${wikiName}`;
+  const validateCredentials = typeof options.validateCredentials === 'function'
+    ? options.validateCredentials
+    : null;
 
   return function writeGuard(req, res, next) {
     const isMutation = req.method === 'PUT' || req.method === 'DELETE';
@@ -91,7 +94,9 @@ function requireBasicWriteAuth() {
       return unauthorized(res, sitePrefix);
     }
 
-    if (creds.name !== expectedUser || creds.pass !== expectedPass) {
+    const validByStore = validateCredentials ? validateCredentials(creds.name, creds.pass) : false;
+    const validByFallbackEnv = creds.name === expectedUser && creds.pass === expectedPass;
+    if (!validByStore && !validByFallbackEnv) {
       if (benign) {
         return respondNoopWrite(res, title);
       }

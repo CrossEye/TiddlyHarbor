@@ -20,8 +20,10 @@ function signPayload(payload) {
   return crypto.createHmac('sha256', getSessionSecret()).update(payload).digest('base64url');
 }
 
-function createWriterSessionCookie() {
+function createWriterSessionCookie(username) {
+  const safeUsername = (username && String(username).trim()) ? String(username) : 'writer';
   const payload = JSON.stringify({
+    username: safeUsername,
     expiresAt: Date.now() + SESSION_MAX_AGE_MS
   });
   const encodedPayload = encodeBase64Url(payload);
@@ -47,16 +49,16 @@ function parseCookieHeader(cookieHeader) {
   }, {});
 }
 
-function hasValidWriterSession(req) {
+function getWriterSession(req) {
   const cookies = parseCookieHeader(req.headers.cookie || '');
   const rawValue = cookies[SESSION_COOKIE_NAME];
   if (!rawValue) {
-    return false;
+    return null;
   }
 
   const separatorIndex = rawValue.lastIndexOf('.');
   if (separatorIndex === -1) {
-    return false;
+    return null;
   }
 
   const encodedPayload = rawValue.slice(0, separatorIndex);
@@ -66,23 +68,36 @@ function hasValidWriterSession(req) {
   const expectedSignatureBuffer = Buffer.from(expectedSignature);
 
   if (signatureBuffer.length !== expectedSignatureBuffer.length) {
-    return false;
+    return null;
   }
 
   if (!crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer)) {
-    return false;
+    return null;
   }
 
   try {
     const payload = JSON.parse(decodeBase64Url(encodedPayload));
-    return typeof payload.expiresAt === 'number' && payload.expiresAt > Date.now();
+    if (typeof payload.expiresAt !== 'number' || payload.expiresAt <= Date.now()) {
+      return null;
+    }
+
+    return {
+      username: typeof payload.username === 'string' && payload.username.trim()
+        ? payload.username
+        : 'writer',
+      expiresAt: payload.expiresAt
+    };
   } catch {
-    return false;
+    return null;
   }
 }
 
-function buildSessionCookieHeader(sitePrefix) {
-  return `${SESSION_COOKIE_NAME}=${createWriterSessionCookie()}; Path=${sitePrefix}/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`;
+function hasValidWriterSession(req) {
+  return Boolean(getWriterSession(req));
+}
+
+function buildSessionCookieHeader(sitePrefix, username) {
+  return `${SESSION_COOKIE_NAME}=${createWriterSessionCookie(username)}; Path=${sitePrefix}/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`;
 }
 
 function buildExpiredSessionCookieHeader(sitePrefix) {
@@ -93,5 +108,6 @@ module.exports = {
   SESSION_COOKIE_NAME,
   buildExpiredSessionCookieHeader,
   buildSessionCookieHeader,
+  getWriterSession,
   hasValidWriterSession
 };
