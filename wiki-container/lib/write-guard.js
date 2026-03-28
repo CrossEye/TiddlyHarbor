@@ -1,5 +1,6 @@
 const basicAuth = require('basic-auth');
-const { hasValidWriterSession } = require('./writer-session');
+const { getWriterSession } = require('./writer-session');
+const { hasWriteAccess } = require('./user-store');
 
 function unauthorized(res, sitePrefix) {
   return res.status(401).json({
@@ -64,8 +65,8 @@ function requireBasicWriteAuth(options = {}) {
   const expectedPass = process.env.BASIC_AUTH_PASS || 'change-me';
   const wikiName = process.env.WIKI_NAME || 'main';
   const sitePrefix = `/${wikiName}`;
-  const validateCredentials = typeof options.validateCredentials === 'function'
-    ? options.validateCredentials
+  const authenticateCredentials = typeof options.authenticateCredentials === 'function'
+    ? options.authenticateCredentials
     : null;
 
   return function writeGuard(req, res, next) {
@@ -81,7 +82,8 @@ function requireBasicWriteAuth(options = {}) {
       return next();
     }
 
-    if (hasValidWriterSession(req)) {
+    const session = getWriterSession(req);
+    if (session && hasWriteAccess(session.role)) {
       return next();
     }
 
@@ -94,9 +96,12 @@ function requireBasicWriteAuth(options = {}) {
       return unauthorized(res, sitePrefix);
     }
 
-    const validByStore = validateCredentials ? validateCredentials(creds.name, creds.pass) : false;
-    const validByFallbackEnv = creds.name === expectedUser && creds.pass === expectedPass;
-    if (!validByStore && !validByFallbackEnv) {
+    const authenticatedUser = authenticateCredentials ? authenticateCredentials(creds.name, creds.pass) : null;
+    const validByFallbackEnv = creds.name === expectedUser && creds.pass === expectedPass
+      ? { username: expectedUser, role: 'writer' }
+      : null;
+    const effectiveUser = authenticatedUser || validByFallbackEnv;
+    if (!effectiveUser || !hasWriteAccess(effectiveUser.role)) {
       if (benign) {
         return respondNoopWrite(res, title);
       }

@@ -7,7 +7,7 @@ const { startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
 const { GitSync } = require('./lib/git-sync');
-const { UserStore } = require('./lib/user-store');
+const { hasWriteAccess, UserStore } = require('./lib/user-store');
 const tiddlyWikiVersion = require('tiddlywiki/package.json').version;
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -116,11 +116,13 @@ function isTiddlyWikiSyncRequest(req) {
 function getStatusPayload(req) {
   const session = getWriterSession(req);
   const authenticated = Boolean(session);
+  const canWrite = authenticated && hasWriteAccess(session.role);
 
   return {
     username: authenticated ? session.username : 'GUEST',
+    role: authenticated ? session.role : 'guest',
     anonymous: !authenticated,
-    read_only: !authenticated,
+    read_only: !canWrite,
     logout_is_available: true,
     space: {
       recipe: 'default'
@@ -145,8 +147,8 @@ function getSafeNextPath(rawNext) {
   return `${sitePrefix}/`;
 }
 
-function completeWriterLogin(req, res, nextPath, username) {
-  res.setHeader('Set-Cookie', buildSessionCookieHeader(sitePrefix, username));
+function completeWriterLogin(req, res, nextPath, user) {
+  res.setHeader('Set-Cookie', buildSessionCookieHeader(sitePrefix, user));
 
   if (isTiddlyWikiSyncRequest(req)) {
     return res.status(204).end();
@@ -195,7 +197,7 @@ app.post([`${sitePrefix}/login`, '/login'], (req, res) => {
     }));
   }
 
-  return completeWriterLogin(req, res, nextPath, user.username);
+  return completeWriterLogin(req, res, nextPath, user);
 });
 
 app.post([`${sitePrefix}/challenge/tiddlywebplugins.tiddlyspace.cookie_form`, '/challenge/tiddlywebplugins.tiddlyspace.cookie_form'], (req, res) => {
@@ -210,7 +212,7 @@ app.post([`${sitePrefix}/challenge/tiddlywebplugins.tiddlyspace.cookie_form`, '/
     });
   }
 
-  return completeWriterLogin(req, res, req.body?.tiddlyweb_redirect || req.query.tiddlyweb_redirect || `${sitePrefix}/`, user.username);
+  return completeWriterLogin(req, res, req.body?.tiddlyweb_redirect || req.query.tiddlyweb_redirect || `${sitePrefix}/`, user);
 });
 
 app.post([`${sitePrefix}/logout`, '/logout'], (req, res) => {
@@ -232,6 +234,8 @@ app.get([`${sitePrefix}/auth/status`, '/auth/status'], (req, res) => {
     wikiName,
     authenticated: Boolean(session),
     username: session ? session.username : null,
+    role: session ? session.role : null,
+    canWrite: session ? hasWriteAccess(session.role) : false,
     loginPath: `${sitePrefix}/login`,
     logoutPath: `${sitePrefix}/logout`
   });
@@ -248,7 +252,7 @@ app.get(['/health', `${sitePrefix}/health`], (req, res) => {
 });
 
 app.use(requireBasicWriteAuth({
-  validateCredentials: (username, password) => Boolean(authenticateWriter(username, password))
+  authenticateCredentials: (username, password) => authenticateWriter(username, password)
 }));
 
 app.use((req, res, next) => {

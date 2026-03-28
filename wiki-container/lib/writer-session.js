@@ -20,10 +20,18 @@ function signPayload(payload) {
   return crypto.createHmac('sha256', getSessionSecret()).update(payload).digest('base64url');
 }
 
-function createWriterSessionCookie(username) {
-  const safeUsername = (username && String(username).trim()) ? String(username) : 'writer';
+function normalizeRole(role) {
+  return role === 'admin' || role === 'reader' || role === 'writer'
+    ? role
+    : 'writer';
+}
+
+function createWriterSessionCookie(user) {
+  const safeUsername = (user && user.username && String(user.username).trim()) ? String(user.username) : 'writer';
+  const safeRole = normalizeRole(user && user.role);
   const payload = JSON.stringify({
     username: safeUsername,
+    role: safeRole,
     expiresAt: Date.now() + SESSION_MAX_AGE_MS
   });
   const encodedPayload = encodeBase64Url(payload);
@@ -85,6 +93,7 @@ function getWriterSession(req) {
       username: typeof payload.username === 'string' && payload.username.trim()
         ? payload.username
         : 'writer',
+      role: normalizeRole(payload.role),
       expiresAt: payload.expiresAt
     };
   } catch {
@@ -96,8 +105,8 @@ function hasValidWriterSession(req) {
   return Boolean(getWriterSession(req));
 }
 
-function buildSessionCookieHeader(sitePrefix, username) {
-  return `${SESSION_COOKIE_NAME}=${createWriterSessionCookie(username)}; Path=${sitePrefix}/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`;
+function buildSessionCookieHeader(sitePrefix, user) {
+  return `${SESSION_COOKIE_NAME}=${createWriterSessionCookie(user)}; Path=${sitePrefix}/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}`;
 }
 
 function buildExpiredSessionCookieHeader(sitePrefix) {

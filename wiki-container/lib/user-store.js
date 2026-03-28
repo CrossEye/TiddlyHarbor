@@ -7,6 +7,10 @@ const DEFAULT_ITERATIONS = 210000;
 const KEY_LENGTH = 32;
 const DIGEST = 'sha256';
 
+function hasWriteAccess(role) {
+  return role === 'writer' || role === 'admin';
+}
+
 function sqlLiteral(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
@@ -299,5 +303,6 @@ class UserStore {
 }
 
 module.exports = {
+  hasWriteAccess,
   UserStore
 };

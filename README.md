@@ -60,6 +60,7 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 - TiddlyWiki write operations (PUT/DELETE under /recipes/*) require writer login.
 - Writer accounts are stored in a local SQLite database at `/app/wiki/.tiddlyharbor/auth.sqlite3` by default.
 - On first startup for each wiki, a bootstrap writer account is created from that wiki's `BASIC_AUTH_USER/BASIC_AUTH_PASS` values.
+- `reader` users can log in but remain read-only; `writer` and `admin` users can write.
 - Writer login is available at `/main/login` and `/sandbox/login` and sets an HTTP-only cookie for subsequent write requests.
 - Writer login supports safe return paths via `?next=/main/...` or `?next=/sandbox/...`.
 - The built-in TiddlyWiki login/logout actions also use the same cookie-backed writer session.
@@ -74,7 +75,7 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 3. Return to the wiki and save normally, or use the TiddlyWiki login/logout controls in the page chrome
 
 Writers can inspect login state at `/main/auth/status` or `/sandbox/auth/status`.
-Status payloads include `username` when authenticated.
+Status payloads include `username` and `role` when authenticated.
 
 ## User Admin CLI
 
