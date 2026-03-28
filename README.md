@@ -4,7 +4,7 @@ TiddlyHarbor
 Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 - Caddy reverse proxy
 - Express wrapper in front of TiddlyWiki
-- Basic authentication guard for write operations
+- Writer login guard for write operations
 - Write-triggered git auto-save with quiescence and max-interval timers
 - Multi-site generation from config/sites.yml
 
@@ -44,10 +44,19 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 ## Current Behavior
 
 - Reads are public.
-- TiddlyWiki write operations (PUT/DELETE under /recipes/*) require HTTP Basic Auth.
+- TiddlyWiki write operations (PUT/DELETE under /recipes/*) require writer login.
+- Writer login is available at `/main/login` and `/sandbox/login` and sets an HTTP-only cookie for subsequent write requests.
 - Auto-save marks a wiki dirty on successful write requests and commits on:
 	- Quiescence timer (default 5 minutes)
 	- Max interval timer (default 60 minutes)
+
+## Writer Access
+
+1. Open `/main/login` or `/sandbox/login`
+2. Sign in with the matching credentials from `.env`
+3. Return to the wiki and save normally
+
+Writers can inspect login state at `/main/auth/status` or `/sandbox/auth/status`.
 
 ## Project Layout
 

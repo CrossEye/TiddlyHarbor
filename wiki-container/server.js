@@ -2,8 +2,10 @@ const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const { renderWriterLoginPage } = require('./lib/auth-pages');
 const { startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
+const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, hasValidWriterSession } = require('./lib/writer-session');
 const { GitSync } = require('./lib/git-sync');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -31,6 +33,8 @@ gitSync.initialize().catch((err) => {
 
 const twProcess = startTiddlyWiki(wikiPath, twPort, wikiName);
 
+app.use(express.urlencoded({ extended: false }));
+
 function getEffectivePath(req) {
   if (req.path === sitePrefix) {
     return '/';
@@ -42,6 +46,96 @@ function getEffectivePath(req) {
 
   return req.path;
 }
+
+function extractTiddlerTitle(effectivePath) {
+  const match = effectivePath.match(/^\/recipes\/[^/]+\/tiddlers\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  let title = match[1];
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const decoded = decodeURIComponent(title);
+      if (decoded === title) {
+        break;
+      }
+      title = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return title;
+}
+
+function isBenignStateWritePath(effectivePath) {
+  const title = extractTiddlerTitle(effectivePath);
+  if (!title) {
+    return false;
+  }
+
+  if (title.includes('StoryList') || title.includes('HistoryList')) {
+    return true;
+  }
+
+  if (title.startsWith('Draft of ') || title.startsWith('$:/Draft')) {
+    return true;
+  }
+
+  return title === '$:/StoryList'
+    || title === '$:/HistoryList'
+    || title.startsWith('$:/state/')
+    || title.startsWith('$:/temp/');
+}
+
+function isValidWriterCredentials(username, password) {
+  return username === (process.env.BASIC_AUTH_USER || 'admin')
+    && password === (process.env.BASIC_AUTH_PASS || 'change-me');
+}
+
+app.get([`${sitePrefix}/login`, '/login'], (req, res) => {
+  if (hasValidWriterSession(req)) {
+    return res.redirect(`${sitePrefix}/`);
+  }
+
+  return res.status(200).send(renderWriterLoginPage({
+    wikiName,
+    sitePrefix,
+    errorMessage: req.query.error === 'invalid' ? 'Incorrect username or password.' : ''
+  }));
+});
+
+app.post([`${sitePrefix}/login`, '/login'], (req, res) => {
+  const username = req.body?.username || '';
+  const password = req.body?.password || '';
+
+  if (!isValidWriterCredentials(username, password)) {
+    return res.status(401).send(renderWriterLoginPage({
+      wikiName,
+      sitePrefix,
+      errorMessage: 'Incorrect username or password.'
+    }));
+  }
+
+  res.setHeader('Set-Cookie', buildSessionCookieHeader(sitePrefix));
+  return res.redirect(`${sitePrefix}/`);
+});
+
+app.post([`${sitePrefix}/logout`, '/logout'], (req, res) => {
+  res.setHeader('Set-Cookie', buildExpiredSessionCookieHeader(sitePrefix));
+  return res.redirect(`${sitePrefix}/`);
+});
+
+app.get([`${sitePrefix}/auth/status`, '/auth/status'], (req, res) => {
+  res.json({
+    ok: true,
+    wikiName,
+    authenticated: hasValidWriterSession(req),
+    loginPath: `${sitePrefix}/login`,
+    logoutPath: `${sitePrefix}/logout`
+  });
+});
 
 app.get(['/health', `${sitePrefix}/health`], (req, res) => {
   res.json({
@@ -57,9 +151,11 @@ app.use(requireBasicWriteAuth());
 
 app.use((req, res, next) => {
   const isMutation = req.method === 'PUT' || req.method === 'DELETE';
-  const isRecipeWrite = getEffectivePath(req).startsWith('/recipes/');
+  const effectivePath = getEffectivePath(req);
+  const isRecipeWrite = effectivePath.startsWith('/recipes/');
+  const shouldTrackInGit = !isBenignStateWritePath(effectivePath);
 
-  if (isMutation && isRecipeWrite) {
+  if (isMutation && isRecipeWrite && shouldTrackInGit) {
     res.on('finish', () => {
       if (res.statusCode < 400) {
         gitSync.markDirty();
