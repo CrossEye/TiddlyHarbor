@@ -44,8 +44,10 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 ## Current Behavior
 
 - Reads are public.
+- Anonymous visitors are reported to TiddlyWiki as read-only, so edit/create controls are hidden by the client.
 - TiddlyWiki write operations (PUT/DELETE under /recipes/*) require writer login.
 - Writer login is available at `/main/login` and `/sandbox/login` and sets an HTTP-only cookie for subsequent write requests.
+- The built-in TiddlyWiki login/logout actions also use the same cookie-backed writer session.
 - Auto-save marks a wiki dirty on successful write requests and commits on:
 	- Quiescence timer (default 5 minutes)
 	- Max interval timer (default 60 minutes)
@@ -54,7 +56,7 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 
 1. Open `/main/login` or `/sandbox/login`
 2. Sign in with the matching credentials from `.env`
-3. Return to the wiki and save normally
+3. Return to the wiki and save normally, or use the TiddlyWiki login/logout controls in the page chrome
 
 Writers can inspect login state at `/main/auth/status` or `/sandbox/auth/status`.
 
