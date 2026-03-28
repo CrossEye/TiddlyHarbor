@@ -2,7 +2,7 @@ const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const { renderWriterLoginPage } = require('./lib/auth-pages');
+const { renderAdminPage, renderWriterLoginPage } = require('./lib/auth-pages');
 const { startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
@@ -83,6 +83,11 @@ function isSelfAction(req) {
   return Boolean(actor && target && actor === target);
 }
 
+function isSelfUser(req, username) {
+  const actor = req.writerSession?.username;
+  return Boolean(actor && username && actor === username);
+}
+
 function requireAdminSession(req, res, next) {
   const session = getWriterSession(req);
   if (!session) {
@@ -119,6 +124,54 @@ function requireAdminSession(req, res, next) {
 
   req.writerSession = session;
   return next();
+}
+
+function requireAdminPageSession(req, res, next) {
+  const session = getWriterSession(req);
+  if (!session) {
+    const nextPath = encodeURIComponent(`${sitePrefix}/admin`);
+    return res.redirect(`${sitePrefix}/login?next=${nextPath}`);
+  }
+
+  if (!hasAdminAccess(session.role)) {
+    auditAdminAction({
+      req,
+      actor: session.username,
+      action: 'admin-page-access',
+      targetUsername: null,
+      outcome: 'denied',
+      detail: `insufficient-role:${session.role}`
+    });
+
+    return res.status(403).send('Admin role required.');
+  }
+
+  req.writerSession = session;
+  return next();
+}
+
+function parseBooleanInput(value) {
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (value === false || value === 'false') {
+    return false;
+  }
+
+  return value;
+}
+
+function redirectAdminPage(res, params = {}) {
+  const query = new URLSearchParams();
+  if (params.msg) {
+    query.set('msg', params.msg);
+  }
+  if (params.err) {
+    query.set('err', params.err);
+  }
+
+  const suffix = query.toString();
+  return res.redirect(suffix ? `${sitePrefix}/admin?${suffix}` : `${sitePrefix}/admin`);
 }
 
 function getEffectivePath(req) {
@@ -311,6 +364,165 @@ app.get([`${sitePrefix}/auth/status`, '/auth/status'], (req, res) => {
     loginPath: `${sitePrefix}/login`,
     logoutPath: `${sitePrefix}/logout`
   });
+});
+
+app.get([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, (req, res) => {
+  const users = userStore.listUsers();
+  auditAdminAction({
+    req,
+    actor: req.writerSession.username,
+    action: 'admin-page-view',
+    targetUsername: null,
+    outcome: 'success',
+    detail: `count:${users.length}`
+  });
+
+  return res.status(200).send(renderAdminPage({
+    wikiName,
+    sitePrefix,
+    currentUser: req.writerSession,
+    users,
+    message: req.query.msg || '',
+    errorMessage: req.query.err || ''
+  }));
+});
+
+app.post([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, (req, res) => {
+  const action = String(req.body?.action || '').trim();
+  const username = String(req.body?.username || '').trim();
+
+  try {
+    if (action === 'create-user') {
+      const user = userStore.createUser({
+        username,
+        password: req.body?.password,
+        role: req.body?.role
+      });
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'create-user',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: `role:${user.role}`
+      });
+      return redirectAdminPage(res, { msg: `Created user ${user.username}` });
+    }
+
+    if (action === 'set-role') {
+      const requestedRole = String(req.body?.role || '').trim().toLowerCase();
+      if (isSelfUser(req, username) && requestedRole && requestedRole !== 'admin') {
+        auditAdminAction({
+          req,
+          actor: req.writerSession.username,
+          action: 'set-role',
+          targetUsername: username,
+          outcome: 'failed',
+          detail: 'self-demotion-blocked'
+        });
+        return redirectAdminPage(res, { err: 'You cannot demote your own admin role.' });
+      }
+
+      const user = userStore.setRole(username, req.body?.role);
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-role',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: `role:${user.role}`
+      });
+      return redirectAdminPage(res, { msg: `Updated role for ${user.username} to ${user.role}` });
+    }
+
+    if (action === 'set-active') {
+      const isActive = parseBooleanInput(req.body?.isActive);
+      if (isSelfUser(req, username) && isActive === false) {
+        auditAdminAction({
+          req,
+          actor: req.writerSession.username,
+          action: 'set-active',
+          targetUsername: username,
+          outcome: 'failed',
+          detail: 'self-disable-blocked'
+        });
+        return redirectAdminPage(res, { err: 'You cannot disable your own admin account.' });
+      }
+
+      if (typeof isActive !== 'boolean') {
+        auditAdminAction({
+          req,
+          actor: req.writerSession.username,
+          action: 'set-active',
+          targetUsername: username,
+          outcome: 'failed',
+          detail: 'invalid-isActive'
+        });
+        return redirectAdminPage(res, { err: 'isActive must be true or false.' });
+      }
+
+      const user = userStore.setActive(username, isActive);
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-active',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: `isActive:${user.isActive}`
+      });
+      return redirectAdminPage(res, { msg: `Set ${user.username} to ${user.isActive ? 'active' : 'disabled'}` });
+    }
+
+    if (action === 'set-password') {
+      const user = userStore.setPassword(username, req.body?.password);
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-password',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: 'password-updated'
+      });
+      return redirectAdminPage(res, { msg: `Updated password for ${user.username}` });
+    }
+
+    if (action === 'delete-user') {
+      if (isSelfUser(req, username)) {
+        auditAdminAction({
+          req,
+          actor: req.writerSession.username,
+          action: 'delete-user',
+          targetUsername: username,
+          outcome: 'failed',
+          detail: 'self-delete-blocked'
+        });
+        return redirectAdminPage(res, { err: 'You cannot delete your own admin account.' });
+      }
+
+      const user = userStore.deleteUser(username);
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'delete-user',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: null
+      });
+      return redirectAdminPage(res, { msg: `Deleted user ${user.username}` });
+    }
+
+    return redirectAdminPage(res, { err: `Unknown action: ${action}` });
+  } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: action || 'unknown',
+      targetUsername: username || null,
+      outcome: 'failed',
+      detail: err.message
+    });
+    return redirectAdminPage(res, { err: err.message });
+  }
 });
 
 app.get([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, res) => {

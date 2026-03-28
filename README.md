@@ -110,6 +110,21 @@ curl.exe -i -s -b admin_cookie.txt -X DELETE http://localhost/main/auth/users/bo
 
 Writers can still edit wiki content, but only admins can call `/auth/users` endpoints.
 
+## Admin UI
+
+A small server-rendered admin UI is available for admins at:
+- `/main/admin`
+- `/sandbox/admin`
+
+The page supports:
+- Creating users
+- Changing role
+- Enabling/disabling users
+- Resetting password
+- Deleting users
+
+It uses the same guardrails and audit logging as the admin API.
+
 Safety and audit notes:
 - The service refuses to disable, demote, or delete the last active `admin` account.
 - An admin cannot disable, demote, or delete their own account through admin endpoints.
