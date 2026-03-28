@@ -110,6 +110,7 @@ Writers can still edit wiki content, but only admins can call `/auth/users` endp
 
 Safety and audit notes:
 - The service refuses to disable, demote, or delete the last active `admin` account.
+- An admin cannot disable, demote, or delete their own account through admin endpoints.
 - Admin user-management endpoint calls are written to container logs as structured `[ADMIN_AUDIT]` events.
 
 ## Project Layout

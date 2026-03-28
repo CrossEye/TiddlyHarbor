@@ -77,6 +77,12 @@ function auditAdminAction({ req, actor, action, targetUsername, outcome, detail 
   console.log(`[ADMIN_AUDIT] ${JSON.stringify(payload)}`);
 }
 
+function isSelfAction(req) {
+  const actor = req.writerSession?.username;
+  const target = req.params?.username;
+  return Boolean(actor && target && actor === target);
+}
+
 function requireAdminSession(req, res, next) {
   const session = getWriterSession(req);
   if (!session) {
@@ -363,6 +369,23 @@ app.post([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req,
 
 app.patch([`${sitePrefix}/auth/users/:username/role`, '/auth/users/:username/role'], requireAdminSession, (req, res) => {
   try {
+    const requestedRole = String(req.body?.role || '').trim().toLowerCase();
+    if (isSelfAction(req) && requestedRole && requestedRole !== 'admin') {
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-role',
+        targetUsername: req.params.username,
+        outcome: 'failed',
+        detail: 'self-demotion-blocked'
+      });
+
+      return res.status(400).json({
+        error: 'self-admin-change-blocked',
+        message: 'You cannot demote your own admin role.'
+      });
+    }
+
     const user = userStore.setRole(req.params.username, req.body?.role);
     auditAdminAction({
       req,
@@ -404,6 +427,22 @@ app.patch([`${sitePrefix}/auth/users/:username/active`, '/auth/users/:username/a
       || rawIsActive === 'false'
       ? rawIsActive === true || rawIsActive === 'true'
       : rawIsActive;
+
+    if (isSelfAction(req) && isActive === false) {
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-active',
+        targetUsername: req.params.username,
+        outcome: 'failed',
+        detail: 'self-disable-blocked'
+      });
+
+      return res.status(400).json({
+        error: 'self-admin-change-blocked',
+        message: 'You cannot disable your own admin account.'
+      });
+    }
 
     if (typeof isActive !== 'boolean') {
       auditAdminAction({
@@ -490,6 +529,22 @@ app.patch([`${sitePrefix}/auth/users/:username/password`, '/auth/users/:username
 
 app.delete([`${sitePrefix}/auth/users/:username`, '/auth/users/:username'], requireAdminSession, (req, res) => {
   try {
+    if (isSelfAction(req)) {
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'delete-user',
+        targetUsername: req.params.username,
+        outcome: 'failed',
+        detail: 'self-delete-blocked'
+      });
+
+      return res.status(400).json({
+        error: 'self-admin-change-blocked',
+        message: 'You cannot delete your own admin account.'
+      });
+    }
+
     const user = userStore.deleteUser(req.params.username);
     auditAdminAction({
       req,
