@@ -7,7 +7,7 @@ const { startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
 const { GitSync } = require('./lib/git-sync');
-const { hasWriteAccess, UserStore } = require('./lib/user-store');
+const { hasAdminAccess, hasWriteAccess, UserStore } = require('./lib/user-store');
 const tiddlyWikiVersion = require('tiddlywiki/package.json').version;
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -48,6 +48,29 @@ gitSync.initialize().catch((err) => {
 const twProcess = startTiddlyWiki(wikiPath, twPort, wikiName);
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+
+function requireAdminSession(req, res, next) {
+  const session = getWriterSession(req);
+  if (!session) {
+    return res.status(401).json({
+      error: 'writer-login-required',
+      message: 'Login required.',
+      loginPath: `${sitePrefix}/login`
+    });
+  }
+
+  if (!hasAdminAccess(session.role)) {
+    return res.status(403).json({
+      error: 'admin-role-required',
+      message: 'Admin role required.',
+      requiredRole: 'admin'
+    });
+  }
+
+  req.writerSession = session;
+  return next();
+}
 
 function getEffectivePath(req) {
   if (req.path === sitePrefix) {
@@ -239,6 +262,105 @@ app.get([`${sitePrefix}/auth/status`, '/auth/status'], (req, res) => {
     loginPath: `${sitePrefix}/login`,
     logoutPath: `${sitePrefix}/logout`
   });
+});
+
+app.get([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, res) => {
+  res.json({
+    ok: true,
+    wikiName,
+    users: userStore.listUsers(),
+    performedBy: req.writerSession.username
+  });
+});
+
+app.post([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, res) => {
+  try {
+    const { username, password, role } = req.body || {};
+    const user = userStore.createUser({ username, password, role });
+    return res.status(201).json({
+      ok: true,
+      user,
+      performedBy: req.writerSession.username
+    });
+  } catch (err) {
+    return res.status(400).json({
+      error: 'user-create-failed',
+      message: err.message
+    });
+  }
+});
+
+app.patch([`${sitePrefix}/auth/users/:username/role`, '/auth/users/:username/role'], requireAdminSession, (req, res) => {
+  try {
+    const user = userStore.setRole(req.params.username, req.body?.role);
+    return res.json({
+      ok: true,
+      user,
+      performedBy: req.writerSession.username
+    });
+  } catch (err) {
+    return res.status(400).json({
+      error: 'user-role-update-failed',
+      message: err.message
+    });
+  }
+});
+
+app.patch([`${sitePrefix}/auth/users/:username/active`, '/auth/users/:username/active'], requireAdminSession, (req, res) => {
+  try {
+    const isActive = req.body?.isActive;
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        error: 'invalid-isActive',
+        message: 'isActive must be true or false.'
+      });
+    }
+
+    const user = userStore.setActive(req.params.username, isActive);
+    return res.json({
+      ok: true,
+      user,
+      performedBy: req.writerSession.username
+    });
+  } catch (err) {
+    return res.status(400).json({
+      error: 'user-active-update-failed',
+      message: err.message
+    });
+  }
+});
+
+app.patch([`${sitePrefix}/auth/users/:username/password`, '/auth/users/:username/password'], requireAdminSession, (req, res) => {
+  try {
+    const password = req.body?.password;
+    const user = userStore.setPassword(req.params.username, password);
+    return res.json({
+      ok: true,
+      user,
+      performedBy: req.writerSession.username
+    });
+  } catch (err) {
+    return res.status(400).json({
+      error: 'user-password-update-failed',
+      message: err.message
+    });
+  }
+});
+
+app.delete([`${sitePrefix}/auth/users/:username`, '/auth/users/:username'], requireAdminSession, (req, res) => {
+  try {
+    const user = userStore.deleteUser(req.params.username);
+    return res.json({
+      ok: true,
+      user,
+      performedBy: req.writerSession.username
+    });
+  } catch (err) {
+    return res.status(400).json({
+      error: 'user-delete-failed',
+      message: err.message
+    });
+  }
 });
 
 app.get(['/health', `${sitePrefix}/health`], (req, res) => {

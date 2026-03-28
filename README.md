@@ -93,6 +93,21 @@ docker compose exec wiki-main node scripts/user-admin.js delete alice
 
 Supported roles are `reader`, `writer`, and `admin`.
 
+## Admin API
+
+Authenticated `admin` sessions can manage users via HTTP:
+
+```cmd
+curl.exe -s -b admin_cookie.txt http://localhost/main/auth/users
+curl.exe -i -s -b admin_cookie.txt -X POST http://localhost/main/auth/users -H "Content-Type: application/json" --data "{\"username\":\"bob\",\"password\":\"StrongPassword123\",\"role\":\"writer\"}"
+curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/role -H "Content-Type: application/json" --data "{\"role\":\"admin\"}"
+curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/active -H "Content-Type: application/json" --data "{\"isActive\":false}"
+curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/password -H "Content-Type: application/json" --data "{\"password\":\"NewStrongPassword456\"}"
+curl.exe -i -s -b admin_cookie.txt -X DELETE http://localhost/main/auth/users/bob
+```
+
+Writers can still edit wiki content, but only admins can call `/auth/users` endpoints.
+
 ## Project Layout
 
 ```

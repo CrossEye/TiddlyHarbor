@@ -11,6 +11,24 @@ function hasWriteAccess(role) {
   return role === 'writer' || role === 'admin';
 }
 
+function hasAdminAccess(role) {
+  return role === 'admin';
+}
+
+function toPublicUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    username: user.username,
+    role: user.role || 'writer',
+    isActive: user.isActive === true,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+}
+
 function sqlLiteral(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
@@ -138,12 +156,14 @@ class UserStore {
       return null;
     }
 
-    const [userNameValue, passwordHash, role, isActiveText] = row.split('\t');
+    const [userNameValue, passwordHash, role, isActiveText, createdAt, updatedAt] = row.split('\t');
     return {
       username: userNameValue,
       passwordHash,
       role: role || 'writer',
-      isActive: isActiveText === '1'
+      isActive: isActiveText === '1',
+      createdAt,
+      updatedAt
     };
   }
 
@@ -194,7 +214,7 @@ class UserStore {
       );
     `);
 
-    return this.getUserByUsername(trimmedUsername);
+    return toPublicUser(this.getUserByUsername(trimmedUsername));
   }
 
   setPassword(username, password) {
@@ -220,7 +240,7 @@ class UserStore {
       throw new Error(`User not found: ${trimmedUsername}`);
     }
 
-    return user;
+    return toPublicUser(user);
   }
 
   setRole(username, role) {
@@ -242,7 +262,7 @@ class UserStore {
       throw new Error(`User not found: ${trimmedUsername}`);
     }
 
-    return user;
+    return toPublicUser(user);
   }
 
   setActive(username, isActive) {
@@ -263,7 +283,7 @@ class UserStore {
       throw new Error(`User not found: ${trimmedUsername}`);
     }
 
-    return user;
+    return toPublicUser(user);
   }
 
   deleteUser(username) {
@@ -282,7 +302,7 @@ class UserStore {
       WHERE username = ${sqlLiteral(trimmedUsername)};
     `);
 
-    return existingUser;
+    return toPublicUser(existingUser);
   }
 
   validateCredentials(username, password) {
@@ -303,6 +323,7 @@ class UserStore {
 }
 
 module.exports = {
+  hasAdminAccess,
   hasWriteAccess,
   UserStore
 };
