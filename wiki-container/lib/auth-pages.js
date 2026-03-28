@@ -7,8 +7,10 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage }) {
+function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath }) {
   const safeError = errorMessage ? `<p style="color:#8b1e1e;background:#fce8e6;padding:0.75rem 1rem;border-radius:0.5rem;">${escapeHtml(errorMessage)}</p>` : '';
+  const safeNextPath = nextPath ? escapeHtml(nextPath) : '';
+  const hiddenNext = safeNextPath ? `<input name="next" type="hidden" value="${safeNextPath}">` : '';
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -22,6 +24,7 @@ function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage }) {
       <p>Authenticate once for write access to the ${escapeHtml(wikiName)} wiki. Reading remains public.</p>
       ${safeError}
       <form method="post" action="${sitePrefix}/login">
+        ${hiddenNext}
         <label for="username" style="display:block;margin-bottom:0.35rem;">Username</label>
         <input id="username" name="username" type="text" autocomplete="username" style="width:100%;padding:0.7rem;margin-bottom:1rem;border:1px solid #b5ab95;border-radius:0.5rem;box-sizing:border-box;">
         <label for="password" style="display:block;margin-bottom:0.35rem;">Password</label>

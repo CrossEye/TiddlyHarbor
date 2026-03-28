@@ -117,39 +117,59 @@ function getStatusPayload(req) {
   };
 }
 
-function completeWriterLogin(req, res) {
+function getSafeNextPath(rawNext) {
+  if (!rawNext || typeof rawNext !== 'string') {
+    return `${sitePrefix}/`;
+  }
+
+  if (!rawNext.startsWith('/')) {
+    return `${sitePrefix}/`;
+  }
+
+  if (rawNext === sitePrefix || rawNext.startsWith(`${sitePrefix}/`)) {
+    return rawNext;
+  }
+
+  return `${sitePrefix}/`;
+}
+
+function completeWriterLogin(req, res, nextPath) {
   res.setHeader('Set-Cookie', buildSessionCookieHeader(sitePrefix));
 
   if (isTiddlyWikiSyncRequest(req)) {
     return res.status(204).end();
   }
 
-  return res.redirect(`${sitePrefix}/`);
+  return res.redirect(getSafeNextPath(nextPath));
 }
 
-function completeWriterLogout(req, res) {
+function completeWriterLogout(req, res, nextPath) {
   res.setHeader('Set-Cookie', buildExpiredSessionCookieHeader(sitePrefix));
 
   if (isTiddlyWikiSyncRequest(req)) {
     return res.status(204).end();
   }
 
-  return res.redirect(`${sitePrefix}/`);
+  return res.redirect(getSafeNextPath(nextPath));
 }
 
 app.get([`${sitePrefix}/login`, '/login'], (req, res) => {
+  const nextPath = getSafeNextPath(req.query.next || `${sitePrefix}/`);
+
   if (hasValidWriterSession(req)) {
-    return res.redirect(`${sitePrefix}/`);
+    return res.redirect(nextPath);
   }
 
   return res.status(200).send(renderWriterLoginPage({
     wikiName,
     sitePrefix,
+    nextPath,
     errorMessage: req.query.error === 'invalid' ? 'Incorrect username or password.' : ''
   }));
 });
 
 app.post([`${sitePrefix}/login`, '/login'], (req, res) => {
+  const nextPath = getSafeNextPath(req.body?.next || req.query.next || `${sitePrefix}/`);
   const username = req.body?.username || '';
   const password = req.body?.password || '';
 
@@ -157,11 +177,12 @@ app.post([`${sitePrefix}/login`, '/login'], (req, res) => {
     return res.status(401).send(renderWriterLoginPage({
       wikiName,
       sitePrefix,
+      nextPath,
       errorMessage: 'Incorrect username or password.'
     }));
   }
 
-  return completeWriterLogin(req, res);
+  return completeWriterLogin(req, res, nextPath);
 });
 
 app.post([`${sitePrefix}/challenge/tiddlywebplugins.tiddlyspace.cookie_form`, '/challenge/tiddlywebplugins.tiddlyspace.cookie_form'], (req, res) => {
@@ -175,11 +196,15 @@ app.post([`${sitePrefix}/challenge/tiddlywebplugins.tiddlyspace.cookie_form`, '/
     });
   }
 
-  return completeWriterLogin(req, res);
+  return completeWriterLogin(req, res, req.body?.tiddlyweb_redirect || req.query.tiddlyweb_redirect || `${sitePrefix}/`);
 });
 
 app.post([`${sitePrefix}/logout`, '/logout'], (req, res) => {
-  return completeWriterLogout(req, res);
+  return completeWriterLogout(req, res, req.body?.next || req.query.next || `${sitePrefix}/`);
+});
+
+app.get([`${sitePrefix}/logout`, '/logout'], (req, res) => {
+  return completeWriterLogout(req, res, req.query.next || `${sitePrefix}/`);
 });
 
 app.get([`${sitePrefix}/status`, '/status'], (req, res) => {
