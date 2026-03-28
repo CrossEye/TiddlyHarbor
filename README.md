@@ -89,9 +89,11 @@ docker compose exec wiki-main node scripts/user-admin.js set-role alice admin
 docker compose exec wiki-main node scripts/user-admin.js disable alice
 docker compose exec wiki-main node scripts/user-admin.js enable alice
 docker compose exec wiki-main node scripts/user-admin.js delete alice
+docker compose exec wiki-main node scripts/user-admin.js --actor CrossEye set-role CrossEye writer
 ```
 
 Supported roles are `reader`, `writer`, and `admin`.
+When `--actor` is set (or `ADMIN_ACTOR`/`BASIC_AUTH_USER` is present), self-demote/self-disable/self-delete operations are blocked.
 
 ## Admin API
 

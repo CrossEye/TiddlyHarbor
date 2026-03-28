@@ -7,6 +7,9 @@ dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 function usage() {
   console.log('Usage: node scripts/user-admin.js <command> [options]');
   console.log('');
+  console.log('Global options:');
+  console.log('  --actor <username>   Acting admin username for self-protection checks');
+  console.log('');
   console.log('Commands:');
   console.log('  list');
   console.log('  create <username> <password> [role]');
@@ -18,6 +21,48 @@ function usage() {
   console.log('');
   console.log('Run inside a wiki container, for example:');
   console.log('  docker compose exec wiki-main node scripts/user-admin.js list');
+}
+
+function parseArgs(argv) {
+  const args = [...argv];
+  let actor = process.env.ADMIN_ACTOR || process.env.BASIC_AUTH_USER || null;
+  const commandParts = [];
+
+  while (args.length > 0) {
+    const token = args.shift();
+    if (token === '--actor') {
+      const next = args.shift();
+      if (!next) {
+        throw new Error('--actor requires a username');
+      }
+      actor = next;
+      continue;
+    }
+
+    commandParts.push(token, ...args);
+    break;
+  }
+
+  const [command, ...commandArgs] = commandParts;
+  return { actor, command, commandArgs };
+}
+
+function assertSelfProtection(actor, action, targetUsername, requestedRole) {
+  if (!actor || !targetUsername || actor !== targetUsername) {
+    return;
+  }
+
+  if (action === 'delete') {
+    throw new Error('Self-protection: cannot delete your own admin account');
+  }
+
+  if (action === 'disable') {
+    throw new Error('Self-protection: cannot disable your own admin account');
+  }
+
+  if (action === 'set-role' && requestedRole && String(requestedRole).toLowerCase() !== 'admin') {
+    throw new Error('Self-protection: cannot demote your own admin role');
+  }
 }
 
 function printUser(user) {
@@ -40,7 +85,11 @@ function printUsers(users) {
 }
 
 function main() {
-  const [, , command, ...args] = process.argv;
+  const parsed = parseArgs(process.argv.slice(2));
+  const command = parsed.command;
+  const args = parsed.commandArgs;
+  const actor = parsed.actor;
+
   if (!command || command === '--help' || command === '-h') {
     usage();
     process.exit(command ? 0 : 1);
@@ -79,6 +128,7 @@ function main() {
 
     case 'set-role': {
       const [username, role] = args;
+      assertSelfProtection(actor, 'set-role', username, role);
       const user = store.setRole(username, role);
       console.log(`Updated role in ${wikiName}:`);
       printUser(user);
@@ -95,6 +145,7 @@ function main() {
 
     case 'disable': {
       const [username] = args;
+      assertSelfProtection(actor, 'disable', username);
       const user = store.setActive(username, false);
       console.log(`Disabled user in ${wikiName}:`);
       printUser(user);
@@ -103,6 +154,7 @@ function main() {
 
     case 'delete': {
       const [username] = args;
+      assertSelfProtection(actor, 'delete', username);
       const user = store.deleteUser(username);
       console.log(`Deleted user in ${wikiName}:`);
       printUser(user);
