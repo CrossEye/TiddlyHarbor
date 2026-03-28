@@ -260,6 +260,8 @@ function getStatusPayload(req) {
     role: authenticated ? session.role : 'guest',
     anonymous: !authenticated,
     read_only: !canWrite,
+    'user-role': authenticated ? session.role : 'anonymous',
+    wiki_version: gitSync.getCachedVersion(),
     logout_is_available: true,
     space: {
       recipe: 'default'
@@ -881,6 +883,75 @@ app.delete([`${sitePrefix}/auth/users/:username`, '/auth/users/:username'], requ
       error: 'user-delete-failed',
       message: err.message
     });
+  }
+});
+
+// ── Version API ───────────────────────────────────────────────────────────
+
+app.post([`${sitePrefix}/api/save`, '/api/save'], requireAdminSession, async (req, res) => {
+  try {
+    const result = await gitSync.forceCommit();
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'force-save',
+      targetUsername: null,
+      outcome: 'success',
+      detail: result.message
+    });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'force-save',
+      targetUsername: null,
+      outcome: 'failed',
+      detail: err.message
+    });
+    return res.status(500).json({ error: 'force-save-failed', message: err.message });
+  }
+});
+
+app.get([`${sitePrefix}/api/version`, '/api/version'], (req, res) => {
+  const session = getWriterSession(req);
+  if (!session) {
+    return res.status(401).json({ error: 'login-required', message: 'Login required.' });
+  }
+
+  gitSync.getCurrentVersion()
+    .then((currentVersion) => gitSync.listVersionTags().then((tags) => ({ currentVersion, tags })))
+    .then((data) => res.json({ ok: true, ...data }))
+    .catch((err) => res.status(500).json({ error: 'version-query-failed', message: err.message }));
+});
+
+app.post([`${sitePrefix}/api/version`, '/api/version'], requireAdminSession, async (req, res) => {
+  const bump = String(req.body?.bump || '').trim().toLowerCase();
+  if (!['patch', 'minor', 'major'].includes(bump)) {
+    return res.status(400).json({ error: 'invalid-bump', message: 'bump must be patch, minor, or major' });
+  }
+
+  try {
+    const result = await gitSync.createVersionTag(bump, req.writerSession.username);
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'bump-version',
+      targetUsername: null,
+      outcome: 'success',
+      detail: `${result.previousVersion} → ${result.newVersion} (${bump})`
+    });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'bump-version',
+      targetUsername: null,
+      outcome: 'failed',
+      detail: err.message
+    });
+    return res.status(500).json({ error: 'version-bump-failed', message: err.message });
   }
 });
 

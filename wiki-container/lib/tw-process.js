@@ -142,12 +142,51 @@ function ensureSignInButton(wikiPath) {
   fs.writeFileSync(configPath, content, 'utf8');
 }
 
+function removeLegacyVersionTiddlers(wikiPath) {
+  const tiddlersPath = path.join(wikiPath, 'tiddlers');
+  const legacyFiles = [
+    '$__tiddlyharbor_version_startup.js.tid',
+    '$__tiddlyharbor_version_messages.js.tid',
+    '$__tiddlyharbor_version_sidebar.tid',
+    '$__tiddlyharbor_version_styles.tid'
+  ];
+
+  for (const file of legacyFiles) {
+    const filePath = path.join(tiddlersPath, file);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+}
+
+function ensurePluginRegistered(wikiPath) {
+  const infoPath = path.join(wikiPath, 'tiddlywiki.info');
+  if (!fs.existsSync(infoPath)) {
+    return;
+  }
+
+  const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+  const pluginName = 'tiddlyharbor/version';
+
+  if (!info.plugins) {
+    info.plugins = [];
+  }
+
+  if (!info.plugins.includes(pluginName)) {
+    info.plugins.push(pluginName);
+    fs.writeFileSync(infoPath, JSON.stringify(info, null, 4) + '\n', 'utf8');
+  }
+}
+
+
 function startTiddlyWiki(wikiPath, port, wikiName) {
   ensureWikiInitialized(wikiPath);
   ensurePathPrefixConfig(wikiPath, wikiName);
   ensureSyncFilterConfig(wikiPath);
   ensureReadOnlyStylesheet(wikiPath);
   ensureSignInButton(wikiPath);
+  ensurePluginRegistered(wikiPath);
+  removeLegacyVersionTiddlers(wikiPath);
   removeLegacyReadOnlyNoticeTiddler(wikiPath);
 
   const bin = tiddlywikiBin();
@@ -163,8 +202,10 @@ function startTiddlyWiki(wikiPath, port, wikiName) {
     'password='
   ];
 
+  const pluginPath = path.join(__dirname, '..', 'plugins');
   const child = spawn(bin, args, {
-    stdio: 'inherit'
+    stdio: 'inherit',
+    env: { ...process.env, TIDDLYWIKI_PLUGIN_PATH: pluginPath }
   });
 
   child.on('exit', (code, signal) => {

@@ -1,0 +1,47 @@
+title: $:/plugins/tiddlyharbor/version/sidebar
+tags: $:/tags/SideBar
+caption: Version
+type: text/vnd.tiddlywiki
+
+\whitespace trim
+
+<div class="th-version-panel">
+
+<div class="th-version-display">
+Wiki version: <strong>v{{$:/temp/tiddlyharbor/version}}</strong>
+</div>
+
+<$list filter="[{$:/status/user-role}match[admin]]" variable="ignore">
+
+<div class="th-version-admin">
+
+<$button class="tc-btn-invisible tc-tiddlylink" tooltip="Force save all pending changes now">
+<$action-sendmessage $message="tm-harbor-force-save"/>
+{{$:/core/images/save-button}} Save Now
+</$button>
+
+<div class="th-version-bump">
+<div class="th-version-bump-label">Bump version:</div>
+<$button class="th-bump-btn" tooltip="Bump patch version">
+<$action-sendmessage $message="tm-harbor-bump-version" bump="patch"/>
+Patch
+</$button>
+<$button class="th-bump-btn" tooltip="Bump minor version">
+<$action-sendmessage $message="tm-harbor-bump-version" bump="minor"/>
+Minor
+</$button>
+<$button class="th-bump-btn" tooltip="Bump major version">
+<$action-sendmessage $message="tm-harbor-bump-version" bump="major"/>
+Major
+</$button>
+</div>
+
+<$list filter="[{$:/temp/tiddlyharbor/version-status}!match[]]" variable="ignore">
+<div class="th-version-status">{{$:/temp/tiddlyharbor/version-status}}</div>
+</$list>
+
+</div>
+
+</$list>
+
+</div>

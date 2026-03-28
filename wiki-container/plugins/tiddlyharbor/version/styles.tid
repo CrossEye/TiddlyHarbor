@@ -1,0 +1,15 @@
+title: $:/plugins/tiddlyharbor/version/styles
+tags: $:/tags/Stylesheet
+type: text/vnd.tiddlywiki
+
+.th-version-panel { padding: 0.5em 0; }
+.th-version-display { margin-bottom: 0.75em; font-size: 0.95em; }
+.th-version-admin { border-top: 1px solid <<colour tiddler-controls-foreground>>; padding-top: 0.75em; }
+.th-version-bump { margin-top: 0.75em; }
+.th-version-bump-label { font-size: 0.85em; font-weight: bold; margin-bottom: 0.35em; }
+.th-bump-btn { display: inline-block; margin-right: 0.5em; padding: 0.25em 0.75em;
+  border: 1px solid <<colour tiddler-controls-foreground>>; border-radius: 0.3em;
+  font-size: 0.85em; cursor: pointer; }
+.th-bump-btn:hover { background: <<colour tiddler-controls-foreground>>; color: <<colour tiddler-background>>; }
+.th-version-status { margin-top: 0.75em; font-style: italic; font-size: 0.85em;
+  color: <<colour muted-foreground>>; }

@@ -1,0 +1,8 @@
+title: $:/plugins/tiddlyharbor/version/readme
+
+Adds a "Version" sidebar tab showing the current semantic version of the wiki.
+
+Admins can:
+
+* ''Save Now'' — force an immediate git commit
+* ''Bump Version'' — create a new semver tag (patch, minor, or major)
