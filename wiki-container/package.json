@@ -5,7 +5,8 @@
   "description": "Phase 1 TiddlyHarbor wiki container",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "users": "node scripts/user-admin.js"
   },
   "dependencies": {
     "basic-auth": "^2.0.1",

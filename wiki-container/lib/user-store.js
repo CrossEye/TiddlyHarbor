@@ -51,6 +51,15 @@ class UserStore {
     this.bootstrapPassword = bootstrapPassword || 'change-me';
   }
 
+  static normalizeRole(role) {
+    const normalized = String(role || 'writer').trim().toLowerCase();
+    if (!['reader', 'writer', 'admin'].includes(normalized)) {
+      throw new Error(`Unsupported role: ${role}`);
+    }
+
+    return normalized;
+  }
+
   sqliteQuery(sql) {
     const result = spawnSync('sqlite3', ['-noheader', '-separator', '\t', this.dbPath, sql], {
       encoding: 'utf8'
@@ -132,6 +141,144 @@ class UserStore {
       role: role || 'writer',
       isActive: isActiveText === '1'
     };
+  }
+
+  listUsers() {
+    const output = this.sqliteQuery(`
+      SELECT username, role, is_active, created_at, updated_at
+      FROM users
+      ORDER BY username ASC;
+    `);
+
+    if (!output) {
+      return [];
+    }
+
+    return output.split(/\r?\n/).filter(Boolean).map((line) => {
+      const [username, role, isActiveText, createdAt, updatedAt] = line.split('\t');
+      return {
+        username,
+        role: role || 'writer',
+        isActive: isActiveText === '1',
+        createdAt,
+        updatedAt
+      };
+    });
+  }
+
+  createUser({ username, password, role = 'writer' }) {
+    const trimmedUsername = String(username || '').trim();
+    if (!trimmedUsername) {
+      throw new Error('Username is required');
+    }
+
+    if (!password) {
+      throw new Error('Password is required');
+    }
+
+    const normalizedRole = UserStore.normalizeRole(role);
+    const passwordHash = hashPassword(password);
+
+    this.sqliteQuery(`
+      INSERT INTO users (username, password_hash, role, is_active, updated_at)
+      VALUES (
+        ${sqlLiteral(trimmedUsername)},
+        ${sqlLiteral(passwordHash)},
+        ${sqlLiteral(normalizedRole)},
+        1,
+        datetime('now')
+      );
+    `);
+
+    return this.getUserByUsername(trimmedUsername);
+  }
+
+  setPassword(username, password) {
+    const trimmedUsername = String(username || '').trim();
+    if (!trimmedUsername) {
+      throw new Error('Username is required');
+    }
+
+    if (!password) {
+      throw new Error('Password is required');
+    }
+
+    const passwordHash = hashPassword(password);
+    this.sqliteQuery(`
+      UPDATE users
+      SET password_hash = ${sqlLiteral(passwordHash)},
+          updated_at = datetime('now')
+      WHERE username = ${sqlLiteral(trimmedUsername)};
+    `);
+
+    const user = this.getUserByUsername(trimmedUsername);
+    if (!user) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
+    return user;
+  }
+
+  setRole(username, role) {
+    const trimmedUsername = String(username || '').trim();
+    if (!trimmedUsername) {
+      throw new Error('Username is required');
+    }
+
+    const normalizedRole = UserStore.normalizeRole(role);
+    this.sqliteQuery(`
+      UPDATE users
+      SET role = ${sqlLiteral(normalizedRole)},
+          updated_at = datetime('now')
+      WHERE username = ${sqlLiteral(trimmedUsername)};
+    `);
+
+    const user = this.getUserByUsername(trimmedUsername);
+    if (!user) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
+    return user;
+  }
+
+  setActive(username, isActive) {
+    const trimmedUsername = String(username || '').trim();
+    if (!trimmedUsername) {
+      throw new Error('Username is required');
+    }
+
+    this.sqliteQuery(`
+      UPDATE users
+      SET is_active = ${isActive ? 1 : 0},
+          updated_at = datetime('now')
+      WHERE username = ${sqlLiteral(trimmedUsername)};
+    `);
+
+    const user = this.getUserByUsername(trimmedUsername);
+    if (!user) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
+    return user;
+  }
+
+  deleteUser(username) {
+    const trimmedUsername = String(username || '').trim();
+    if (!trimmedUsername) {
+      throw new Error('Username is required');
+    }
+
+    const existingUser = this.getUserByUsername(trimmedUsername);
+    if (!existingUser) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
+    this.sqliteQuery(`
+      DELETE FROM users
+      WHERE username = ${sqlLiteral(trimmedUsername)};
+    `);
+
+    return existingUser;
   }
 
   validateCredentials(username, password) {

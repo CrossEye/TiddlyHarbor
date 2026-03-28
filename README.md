@@ -76,6 +76,22 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 Writers can inspect login state at `/main/auth/status` or `/sandbox/auth/status`.
 Status payloads include `username` when authenticated.
 
+## User Admin CLI
+
+Run user-management commands inside the target wiki container:
+
+```cmd
+docker compose exec wiki-main node scripts/user-admin.js list
+docker compose exec wiki-main node scripts/user-admin.js create alice StrongPassword123 writer
+docker compose exec wiki-main node scripts/user-admin.js set-password alice EvenStrongerPassword456
+docker compose exec wiki-main node scripts/user-admin.js set-role alice admin
+docker compose exec wiki-main node scripts/user-admin.js disable alice
+docker compose exec wiki-main node scripts/user-admin.js enable alice
+docker compose exec wiki-main node scripts/user-admin.js delete alice
+```
+
+Supported roles are `reader`, `writer`, and `admin`.
+
 ## Project Layout
 
 ```
