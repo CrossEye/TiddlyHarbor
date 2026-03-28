@@ -41,9 +41,32 @@ function ensurePathPrefixConfig(wikiPath, wikiName) {
   fs.writeFileSync(configPath, content, 'utf8');
 }
 
+function ensureReadOnlyNoticeTiddler(wikiPath, wikiName) {
+  const tiddlersPath = path.join(wikiPath, 'tiddlers');
+  const noticePath = path.join(tiddlersPath, '$__tiddlyharbor_ui_readonly-notice.tid');
+  const loginPath = `/${wikiName}/login`;
+  const content = [
+    'title: $:/tiddlyharbor/ui/readonly-notice',
+    'tags: $:/tags/TopBody',
+    'type: text/vnd.tiddlywiki',
+    '',
+    '<$reveal state="$:/status/IsReadOnly" type="match" text="yes" default="no">',
+    '<div style="background:#fff8dc;border:1px solid #e6d8a8;border-radius:4px;padding:.5em .75em;margin:.5em 0;">',
+    '<strong>Read-only view.</strong> You are browsing as a public reader.',
+    `<a href="${loginPath}" style="margin-left:.5em;">Writer login</a>`,
+    '</div>',
+    '</$reveal>',
+    ''
+  ].join('\n');
+
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+  fs.writeFileSync(noticePath, content, 'utf8');
+}
+
 function startTiddlyWiki(wikiPath, port, wikiName) {
   ensureWikiInitialized(wikiPath);
   ensurePathPrefixConfig(wikiPath, wikiName);
+  ensureReadOnlyNoticeTiddler(wikiPath, wikiName);
 
   const bin = tiddlywikiBin();
   const args = [

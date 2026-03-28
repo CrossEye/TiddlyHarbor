@@ -45,6 +45,7 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 
 - Reads are public.
 - Anonymous visitors are reported to TiddlyWiki as read-only, so edit/create controls are hidden by the client.
+- Anonymous visitors also see a small top-page read-only notice with a direct writer login link.
 - TiddlyWiki write operations (PUT/DELETE under /recipes/*) require writer login.
 - Writer login is available at `/main/login` and `/sandbox/login` and sets an HTTP-only cookie for subsequent write requests.
 - The built-in TiddlyWiki login/logout actions also use the same cookie-backed writer session.
