@@ -27,7 +27,19 @@ Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
 3. Generate routing and compose files from config:
 
 	 ```bash
-	 npm run setup
+	 node scripts/generate-config.js
+	 ```
+
+	 On Windows cmd:
+
+	 ```cmd
+	 setup.cmd
+	 ```
+
+	 On Windows PowerShell (if npm script execution is restricted):
+
+	 ```powershell
+	 node scripts/generate-config.js
 	 ```
 
 4. Start the stack:
@@ -86,7 +98,7 @@ TW_Hosting/
 ## Regenerating Config
 
 1. Edit config/sites.yml
-2. Run npm run setup
+2. Run node scripts/generate-config.js
 3. Restart docker compose
 
 ## What Comes Next

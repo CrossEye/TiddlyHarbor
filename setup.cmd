@@ -1,2 +1,2 @@
 @echo off
-npm.cmd run setup
+node scripts\generate-config.js
