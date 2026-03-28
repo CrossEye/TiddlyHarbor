@@ -1,0 +1,5 @@
+.env
+
+# Node dependencies in case container is run locally without Docker
+node_modules/
+wiki-container/node_modules/

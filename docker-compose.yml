@@ -1,0 +1,50 @@
+services:
+  wiki-main:
+    build:
+      context: ./wiki-container
+    environment:
+      - PORT=8080
+      - TW_INTERNAL_PORT=8081
+      - WIKI_PATH=/app/wiki
+      - WIKI_NAME=main
+      - BASIC_AUTH_USER=${MAIN_BASIC_AUTH_USER:-admin}
+      - BASIC_AUTH_PASS=${MAIN_BASIC_AUTH_PASS:-change-me-main}
+      - GIT_AUTOSAVE_ENABLED=true
+      - GIT_AUTOPUSH=false
+      - QUIESCENCE_MINUTES=5
+      - MAX_COMMIT_INTERVAL_MINUTES=60
+      - GIT_REMOTE_URL=
+    volumes:
+      - wiki_main_data:/app/wiki
+    restart: unless-stopped
+  wiki-sandbox:
+    build:
+      context: ./wiki-container
+    environment:
+      - PORT=8080
+      - TW_INTERNAL_PORT=8081
+      - WIKI_PATH=/app/wiki
+      - WIKI_NAME=sandbox
+      - BASIC_AUTH_USER=${SANDBOX_BASIC_AUTH_USER:-admin}
+      - BASIC_AUTH_PASS=${SANDBOX_BASIC_AUTH_PASS:-change-me-sandbox}
+      - GIT_AUTOSAVE_ENABLED=true
+      - GIT_AUTOPUSH=false
+      - QUIESCENCE_MINUTES=5
+      - MAX_COMMIT_INTERVAL_MINUTES=60
+      - GIT_REMOTE_URL=
+    volumes:
+      - wiki_sandbox_data:/app/wiki
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - '80:80'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - wiki-main
+      - wiki-sandbox
+    restart: unless-stopped
+volumes:
+  wiki_main_data: null
+  wiki_sandbox_data: null

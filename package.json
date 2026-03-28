@@ -1,0 +1,13 @@
+{
+  "name": "tiddlyharbor",
+  "version": "0.2.0",
+  "private": true,
+  "description": "TiddlyHarbor config generation utilities",
+  "scripts": {
+    "setup": "node scripts/generate-config.js",
+    "setup:check": "node scripts/generate-config.js --check"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

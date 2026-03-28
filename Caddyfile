@@ -1,0 +1,13 @@
+:80 {
+  redir / /main/
+  redir /main /main/
+  redir /sandbox /sandbox/
+  handle /main/* {
+    reverse_proxy wiki-main:8080
+  }
+  handle /sandbox/* {
+    reverse_proxy wiki-sandbox:8080
+  }
+  respond "Unknown site path" 404
+}
+

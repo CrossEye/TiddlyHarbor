@@ -1,0 +1,15 @@
+defaults:
+  quiescence_minutes: 5
+  max_commit_interval_minutes: 60
+  public_read: true
+  git_autosave_enabled: true
+  git_autopush: false
+
+sites:
+  main:
+    path: /main
+    repo: ""
+
+  sandbox:
+    path: /sandbox
+    repo: ""
