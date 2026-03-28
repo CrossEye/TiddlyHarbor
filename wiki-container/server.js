@@ -50,9 +50,44 @@ const twProcess = startTiddlyWiki(wikiPath, twPort, wikiName);
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+function getRequesterIp(req) {
+  const xff = req.get('X-Forwarded-For');
+  if (xff) {
+    return xff.split(',')[0].trim();
+  }
+
+  return req.ip || req.socket?.remoteAddress || 'unknown';
+}
+
+function auditAdminAction({ req, actor, action, targetUsername, outcome, detail }) {
+  const payload = {
+    event: 'admin_user_mgmt',
+    ts: new Date().toISOString(),
+    wikiName,
+    actor: actor || 'anonymous',
+    action,
+    targetUsername: targetUsername || null,
+    outcome,
+    detail: detail || null,
+    method: req.method,
+    path: req.originalUrl,
+    ip: getRequesterIp(req)
+  };
+
+  console.log(`[ADMIN_AUDIT] ${JSON.stringify(payload)}`);
+}
+
 function requireAdminSession(req, res, next) {
   const session = getWriterSession(req);
   if (!session) {
+    auditAdminAction({
+      req,
+      actor: null,
+      action: 'require-admin-session',
+      targetUsername: req.params?.username,
+      outcome: 'denied',
+      detail: 'no-session'
+    });
     return res.status(401).json({
       error: 'writer-login-required',
       message: 'Login required.',
@@ -61,6 +96,14 @@ function requireAdminSession(req, res, next) {
   }
 
   if (!hasAdminAccess(session.role)) {
+    auditAdminAction({
+      req,
+      actor: session.username,
+      action: 'require-admin-session',
+      targetUsername: req.params?.username,
+      outcome: 'denied',
+      detail: `insufficient-role:${session.role}`
+    });
     return res.status(403).json({
       error: 'admin-role-required',
       message: 'Admin role required.',
@@ -265,10 +308,20 @@ app.get([`${sitePrefix}/auth/status`, '/auth/status'], (req, res) => {
 });
 
 app.get([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, res) => {
+  const users = userStore.listUsers();
+  auditAdminAction({
+    req,
+    actor: req.writerSession.username,
+    action: 'list-users',
+    targetUsername: null,
+    outcome: 'success',
+    detail: `count:${users.length}`
+  });
+
   res.json({
     ok: true,
     wikiName,
-    users: userStore.listUsers(),
+    users,
     performedBy: req.writerSession.username
   });
 });
@@ -277,12 +330,30 @@ app.post([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req,
   try {
     const { username, password, role } = req.body || {};
     const user = userStore.createUser({ username, password, role });
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'create-user',
+      targetUsername: user.username,
+      outcome: 'success',
+      detail: `role:${user.role}`
+    });
+
     return res.status(201).json({
       ok: true,
       user,
       performedBy: req.writerSession.username
     });
   } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'create-user',
+      targetUsername: req.body?.username,
+      outcome: 'failed',
+      detail: err.message
+    });
+
     return res.status(400).json({
       error: 'user-create-failed',
       message: err.message
@@ -293,12 +364,30 @@ app.post([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req,
 app.patch([`${sitePrefix}/auth/users/:username/role`, '/auth/users/:username/role'], requireAdminSession, (req, res) => {
   try {
     const user = userStore.setRole(req.params.username, req.body?.role);
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-role',
+      targetUsername: user.username,
+      outcome: 'success',
+      detail: `role:${user.role}`
+    });
+
     return res.json({
       ok: true,
       user,
       performedBy: req.writerSession.username
     });
   } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-role',
+      targetUsername: req.params.username,
+      outcome: 'failed',
+      detail: err.message
+    });
+
     return res.status(400).json({
       error: 'user-role-update-failed',
       message: err.message
@@ -308,8 +397,24 @@ app.patch([`${sitePrefix}/auth/users/:username/role`, '/auth/users/:username/rol
 
 app.patch([`${sitePrefix}/auth/users/:username/active`, '/auth/users/:username/active'], requireAdminSession, (req, res) => {
   try {
-    const isActive = req.body?.isActive;
+    const rawIsActive = req.body?.isActive;
+    const isActive = rawIsActive === true
+      || rawIsActive === 'true'
+      || rawIsActive === false
+      || rawIsActive === 'false'
+      ? rawIsActive === true || rawIsActive === 'true'
+      : rawIsActive;
+
     if (typeof isActive !== 'boolean') {
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-active',
+        targetUsername: req.params.username,
+        outcome: 'failed',
+        detail: 'invalid-isActive'
+      });
+
       return res.status(400).json({
         error: 'invalid-isActive',
         message: 'isActive must be true or false.'
@@ -317,12 +422,30 @@ app.patch([`${sitePrefix}/auth/users/:username/active`, '/auth/users/:username/a
     }
 
     const user = userStore.setActive(req.params.username, isActive);
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-active',
+      targetUsername: user.username,
+      outcome: 'success',
+      detail: `isActive:${user.isActive}`
+    });
+
     return res.json({
       ok: true,
       user,
       performedBy: req.writerSession.username
     });
   } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-active',
+      targetUsername: req.params.username,
+      outcome: 'failed',
+      detail: err.message
+    });
+
     return res.status(400).json({
       error: 'user-active-update-failed',
       message: err.message
@@ -334,12 +457,30 @@ app.patch([`${sitePrefix}/auth/users/:username/password`, '/auth/users/:username
   try {
     const password = req.body?.password;
     const user = userStore.setPassword(req.params.username, password);
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-password',
+      targetUsername: user.username,
+      outcome: 'success',
+      detail: 'password-updated'
+    });
+
     return res.json({
       ok: true,
       user,
       performedBy: req.writerSession.username
     });
   } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'set-password',
+      targetUsername: req.params.username,
+      outcome: 'failed',
+      detail: err.message
+    });
+
     return res.status(400).json({
       error: 'user-password-update-failed',
       message: err.message
@@ -350,12 +491,30 @@ app.patch([`${sitePrefix}/auth/users/:username/password`, '/auth/users/:username
 app.delete([`${sitePrefix}/auth/users/:username`, '/auth/users/:username'], requireAdminSession, (req, res) => {
   try {
     const user = userStore.deleteUser(req.params.username);
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'delete-user',
+      targetUsername: user.username,
+      outcome: 'success',
+      detail: null
+    });
+
     return res.json({
       ok: true,
       user,
       performedBy: req.writerSession.username
     });
   } catch (err) {
+    auditAdminAction({
+      req,
+      actor: req.writerSession.username,
+      action: 'delete-user',
+      targetUsername: req.params.username,
+      outcome: 'failed',
+      detail: err.message
+    });
+
     return res.status(400).json({
       error: 'user-delete-failed',
       message: err.message

@@ -146,7 +146,7 @@ class UserStore {
     }
 
     const row = this.sqliteQuery(`
-      SELECT username, password_hash, role, is_active
+      SELECT username, password_hash, role, is_active, created_at, updated_at
       FROM users
       WHERE username = ${sqlLiteral(username)}
       LIMIT 1;
@@ -165,6 +165,28 @@ class UserStore {
       createdAt,
       updatedAt
     };
+  }
+
+  countActiveAdmins() {
+    const countText = this.sqliteQuery(`
+      SELECT COUNT(1)
+      FROM users
+      WHERE role = 'admin' AND is_active = 1;
+    `);
+
+    const count = Number(countText || '0');
+    return Number.isFinite(count) ? count : 0;
+  }
+
+  assertNotRemovingLastActiveAdmin(user) {
+    if (!user || user.role !== 'admin' || !user.isActive) {
+      return;
+    }
+
+    const activeAdmins = this.countActiveAdmins();
+    if (activeAdmins <= 1) {
+      throw new Error('Refusing to remove or disable the last active admin account');
+    }
   }
 
   listUsers() {
@@ -249,7 +271,16 @@ class UserStore {
       throw new Error('Username is required');
     }
 
+    const existingUser = this.getUserByUsername(trimmedUsername);
+    if (!existingUser) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
     const normalizedRole = UserStore.normalizeRole(role);
+    if (existingUser.role === 'admin' && normalizedRole !== 'admin') {
+      this.assertNotRemovingLastActiveAdmin(existingUser);
+    }
+
     this.sqliteQuery(`
       UPDATE users
       SET role = ${sqlLiteral(normalizedRole)},
@@ -258,10 +289,6 @@ class UserStore {
     `);
 
     const user = this.getUserByUsername(trimmedUsername);
-    if (!user) {
-      throw new Error(`User not found: ${trimmedUsername}`);
-    }
-
     return toPublicUser(user);
   }
 
@@ -269,6 +296,15 @@ class UserStore {
     const trimmedUsername = String(username || '').trim();
     if (!trimmedUsername) {
       throw new Error('Username is required');
+    }
+
+    const existingUser = this.getUserByUsername(trimmedUsername);
+    if (!existingUser) {
+      throw new Error(`User not found: ${trimmedUsername}`);
+    }
+
+    if (existingUser.role === 'admin' && existingUser.isActive && !isActive) {
+      this.assertNotRemovingLastActiveAdmin(existingUser);
     }
 
     this.sqliteQuery(`
@@ -279,10 +315,6 @@ class UserStore {
     `);
 
     const user = this.getUserByUsername(trimmedUsername);
-    if (!user) {
-      throw new Error(`User not found: ${trimmedUsername}`);
-    }
-
     return toPublicUser(user);
   }
 
@@ -296,6 +328,8 @@ class UserStore {
     if (!existingUser) {
       throw new Error(`User not found: ${trimmedUsername}`);
     }
+
+    this.assertNotRemovingLastActiveAdmin(existingUser);
 
     this.sqliteQuery(`
       DELETE FROM users

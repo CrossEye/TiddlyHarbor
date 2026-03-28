@@ -108,6 +108,10 @@ curl.exe -i -s -b admin_cookie.txt -X DELETE http://localhost/main/auth/users/bo
 
 Writers can still edit wiki content, but only admins can call `/auth/users` endpoints.
 
+Safety and audit notes:
+- The service refuses to disable, demote, or delete the last active `admin` account.
+- Admin user-management endpoint calls are written to container logs as structured `[ADMIN_AUDIT]` events.
+
 ## Project Layout
 
 ```
