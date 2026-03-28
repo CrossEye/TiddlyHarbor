@@ -131,7 +131,7 @@ class UserStore {
     const passwordHash = hashPassword(password);
     this.sqliteQuery(`
       INSERT INTO users (username, password_hash, role, is_active)
-      VALUES (${sqlLiteral(username)}, ${sqlLiteral(passwordHash)}, 'writer', 1);
+      VALUES (${sqlLiteral(username)}, ${sqlLiteral(passwordHash)}, 'admin', 1);
     `);
   }
 

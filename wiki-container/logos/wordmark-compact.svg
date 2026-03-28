@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 50" width="320" height="50">
+  <!-- Compact wordmark: smaller icon inline with text (for navbars, footers) -->
+
+  <!-- Small icon -->
+  <g transform="translate(4, 3)">
+    <rect width="44" height="44" rx="8" fill="#0f2b44"/>
+
+    <!-- Three containers -->
+    <rect x="5" y="13" width="10" height="14" rx="1" fill="#1a5276"/>
+    <rect x="17" y="10" width="10" height="17" rx="1" fill="#2e86ab"/>
+    <rect x="29" y="14" width="9" height="13" rx="1" fill="#1a3a5c"/>
+
+    <!-- TW labels -->
+    <text x="10" y="21.5" font-family="Arial, sans-serif" font-size="4.5" font-weight="700" fill="#5dade2" text-anchor="middle" opacity="0.8">TW</text>
+    <text x="22" y="20" font-family="Arial, sans-serif" font-size="5" font-weight="700" fill="#e8e8e8" text-anchor="middle" opacity="0.8">TW</text>
+    <text x="33.5" y="22" font-family="Arial, sans-serif" font-size="4.5" font-weight="700" fill="#5dade2" text-anchor="middle" opacity="0.8">TW</text>
+
+    <!-- Dock -->
+    <line x1="3" y1="29" x2="41" y2="29" stroke="#5d6d7e" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- Water -->
+    <path d="M3,33 Q13,31 22,33 Q31,35 41,33" fill="none" stroke="#2e86ab" stroke-width="1" stroke-linecap="round" opacity="0.4"/>
+  </g>
+
+  <!-- Text -->
+  <text x="58" y="32" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="600" fill="#e8e8e8">
+    <tspan fill="#5dade2">Tiddly</tspan><tspan fill="#4a6a82">Harbor</tspan>
+  </text>
+</svg>

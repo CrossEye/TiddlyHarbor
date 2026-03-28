@@ -1,7 +1,7 @@
 const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
 const { renderAdminPage, renderWriterLoginPage } = require('./lib/auth-pages');
 const { startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
@@ -826,7 +826,13 @@ app.use(
     target: `http://127.0.0.1:${twPort}`,
     changeOrigin: true,
     ws: true,
-    logLevel: 'warn'
+    logLevel: 'warn',
+    on: {
+      // Express body parsers (json, urlencoded) consume the request stream
+      // before the proxy sees it.  fixRequestBody re-serialises req.body so
+      // PUT/DELETE requests reach TiddlyWiki intact.
+      proxyReq: fixRequestBody
+    }
   })
 );
 

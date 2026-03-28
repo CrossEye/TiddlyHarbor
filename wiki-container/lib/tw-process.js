@@ -50,9 +50,104 @@ function removeLegacyReadOnlyNoticeTiddler(wikiPath) {
   }
 }
 
+// Override the default SyncFilter to also exclude $:/StoryList.  The default
+// filter already drops $:/HistoryList (prefix), $:/state/*, $:/temp/*,
+// $:/status/* etc., but $:/StoryList slips through.  Every time a reader
+// opens a tiddler the StoryList changes, the syncer queues a save, the
+// server rejects it (no auth), and the sync indicator turns red.
+function ensureSyncFilterConfig(wikiPath) {
+  const tiddlersPath = path.join(wikiPath, 'tiddlers');
+  const configPath = path.join(tiddlersPath, '$__config_SyncFilter.tid');
+  const content = [
+    'title: $:/config/SyncFilter',
+    '',
+    '[is[tiddler]] -[[$:/core]] -[[$:/library/sjcl.js]] -[prefix[$:/boot/]] -[[$:/StoryList]] -[prefix[$:/HistoryList]] -[status[pending]plugin-type[import]] -[[$:/isEncrypted]] -[prefix[$:/status/]] -[prefix[$:/state/]] -[prefix[$:/temp/]]',
+    ''
+  ].join('\n');
+
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+  fs.writeFileSync(configPath, content, 'utf8');
+}
+
+// Conditional stylesheet that hides editing UI when TiddlyWiki is in
+// read-only mode (i.e. the user is not authenticated as a writer/admin).
+// The /status endpoint already returns read_only:true for anonymous users,
+// which TW maps to $:/status/IsReadOnly = "yes".
+function ensureReadOnlyStylesheet(wikiPath) {
+  const tiddlersPath = path.join(wikiPath, 'tiddlers');
+  const configPath = path.join(tiddlersPath, '$__tiddlyharbor_ui_readonly-styles.tid');
+  const content = [
+    'title: $:/tiddlyharbor/ui/readonly-styles',
+    'tags: $:/tags/Stylesheet',
+    'type: text/vnd.tiddlywiki',
+    '',
+    '\\rules only filteredtranscludeinline macrodef macrocallinline html',
+    '',
+    '<$list filter="[{$:/status/IsReadOnly}match[yes]]">',
+    '',
+    '/* ── Page controls: hide content-creation buttons ── */',
+    'button[aria-label="new tiddler"],',
+    'button[aria-label="Create a new tiddler"],',
+    'button[aria-label="new journal"],',
+    'button[aria-label="Create a new journal tiddler"],',
+    'button[aria-label="import"],',
+    'button[aria-label="Import many types of file including text, image, TiddlyWiki or JSON"] {',
+    '  display: none !important;',
+    '}',
+    '',
+    '/* ── Tiddler toolbar: hide edit and clone ── */',
+    'button[aria-label="Edit this tiddler"],',
+    'button[aria-label="Clone this tiddler"] {',
+    '  display: none !important;',
+    '}',
+    '',
+    '/* ── Hide draft tiddlers list ── */',
+    '.tc-drafts-list { display: none !important; }',
+    '',
+    '</$list>',
+    ''
+  ].join('\n');
+
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+  fs.writeFileSync(configPath, content, 'utf8');
+}
+
+// A page-control button that shows a "sign in" link for anonymous / readonly
+// visitors.  Uses the locked-padlock icon and links to the login page via a
+// simple relative URL (resolves against the wiki's path-prefix base).
+function ensureSignInButton(wikiPath) {
+  const tiddlersPath = path.join(wikiPath, 'tiddlers');
+  const configPath = path.join(tiddlersPath, '$__tiddlyharbor_ui_Buttons_sign-in.tid');
+  const content = [
+    'title: $:/tiddlyharbor/ui/Buttons/sign-in',
+    'tags: $:/tags/PageControls',
+    'caption: {{$:/core/images/locked-padlock}} sign in',
+    'description: Sign in for write access',
+    '',
+    '\\whitespace trim',
+    '<$list filter="[{$:/status/IsReadOnly}match[yes]]" variable="ignore">',
+    '<a href="login" class="tc-btn-invisible" title="Sign in for write access" aria-label="sign in" style="text-decoration:none;">',
+    '<%if [<tv-config-toolbar-icons>match[yes]] %>',
+    '{{$:/core/images/locked-padlock}}',
+    '<%endif%>',
+    '<%if [<tv-config-toolbar-text>match[yes]] %>',
+    '<span class="tc-btn-text">sign in</span>',
+    '<%endif%>',
+    '</a>',
+    '</$list>',
+    ''
+  ].join('\n');
+
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+  fs.writeFileSync(configPath, content, 'utf8');
+}
+
 function startTiddlyWiki(wikiPath, port, wikiName) {
   ensureWikiInitialized(wikiPath);
   ensurePathPrefixConfig(wikiPath, wikiName);
+  ensureSyncFilterConfig(wikiPath);
+  ensureReadOnlyStylesheet(wikiPath);
+  ensureSignInButton(wikiPath);
   removeLegacyReadOnlyNoticeTiddler(wikiPath);
 
   const bin = tiddlywikiBin();
