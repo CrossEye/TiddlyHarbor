@@ -53,6 +53,7 @@ function buildCompose(config) {
         'TW_INTERNAL_PORT=8081',
         'WIKI_PATH=/app/wiki',
         `WIKI_NAME=${siteName}`,
+        'WRITER_SESSION_SECRET=${WRITER_SESSION_SECRET:-change-me-session-secret}',
         `BASIC_AUTH_USER=\${${siteName.toUpperCase()}_BASIC_AUTH_USER:-admin}`,
         `BASIC_AUTH_PASS=\${${siteName.toUpperCase()}_BASIC_AUTH_PASS:-change-me-${siteName}}`,
         `GIT_AUTOSAVE_ENABLED=${toEnvValue(site.git_autosave_enabled ?? config.defaults.git_autosave_enabled ?? true)}`,
@@ -114,7 +115,7 @@ function buildCaddy(config) {
 
     const sitePath = normalizedPath(siteName, site);
     pathRedirects.push(`  redir ${sitePath} ${sitePath}/`);
-    pathHandles.push(`  handle_path ${sitePath}/* {\n    reverse_proxy ${serviceName}\n  }`);
+    pathHandles.push(`  handle ${sitePath}/* {\n    reverse_proxy ${serviceName}\n  }`);
   }
 
   const defaultSitePath = normalizedPath(siteNames[0], config.sites[siteNames[0]] || {});

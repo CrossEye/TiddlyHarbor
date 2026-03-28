@@ -7,6 +7,7 @@ services:
       - TW_INTERNAL_PORT=8081
       - WIKI_PATH=/app/wiki
       - WIKI_NAME=main
+      - WRITER_SESSION_SECRET=${WRITER_SESSION_SECRET:-change-me-session-secret}
       - BASIC_AUTH_USER=${MAIN_BASIC_AUTH_USER:-admin}
       - BASIC_AUTH_PASS=${MAIN_BASIC_AUTH_PASS:-change-me-main}
       - GIT_AUTOSAVE_ENABLED=true
@@ -25,6 +26,7 @@ services:
       - TW_INTERNAL_PORT=8081
       - WIKI_PATH=/app/wiki
       - WIKI_NAME=sandbox
+      - WRITER_SESSION_SECRET=${WRITER_SESSION_SECRET:-change-me-session-secret}
       - BASIC_AUTH_USER=${SANDBOX_BASIC_AUTH_USER:-admin}
       - BASIC_AUTH_PASS=${SANDBOX_BASIC_AUTH_PASS:-change-me-sandbox}
       - GIT_AUTOSAVE_ENABLED=true
