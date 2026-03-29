@@ -39,9 +39,11 @@ try {
 }
 
 let enabledOAuthProviders = getEnabledProviders();
-const allowedProviderNames = process.env.OAUTH_PROVIDERS
-  ? process.env.OAUTH_PROVIDERS.split(',').map((s) => s.trim()).filter(Boolean)
-  : null;
+const allowedProviderNames = process.env.OAUTH_PROVIDERS === 'none'
+  ? []
+  : process.env.OAUTH_PROVIDERS
+    ? process.env.OAUTH_PROVIDERS.split(',').map((s) => s.trim()).filter(Boolean)
+    : null;
 if (allowedProviderNames) {
   enabledOAuthProviders = enabledOAuthProviders.filter((p) => allowedProviderNames.includes(p.name));
 }

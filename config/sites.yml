@@ -4,7 +4,7 @@ defaults:
   public_read: true
   git_autosave_enabled: true
   git_autopush: false
-  # oauth_providers: [github, google]  # omit to allow all available providers
+  # oauth_providers: [github, google]  # omit = all available; [] = none
 sites:
   main:
     path: /main
@@ -12,3 +12,4 @@ sites:
   sandbox:
     path: /sandbox
     repo: ''
+

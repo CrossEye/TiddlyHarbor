@@ -33,14 +33,16 @@ function getTransporter() {
   return { transporter: cachedTransporter, from: config.from };
 }
 
-async function notifyAdminsOfPendingUser({ user, wikiName, sitePrefix, adminEmails }) {
+async function notifyAdminsOfPendingUser({ user, wikiName, sitePrefix, adminEmails = [] }) {
   const transport = getTransporter();
   if (!transport) {
     console.log('SMTP not configured — skipping pending-user notification');
     return;
   }
 
-  const validEmails = adminEmails.filter((e) => e && e.includes('@'));
+  const fallback = process.env.ADMIN_EMAIL;
+  const candidates = adminEmails.length > 0 ? adminEmails : (fallback ? [fallback] : []);
+  const validEmails = candidates.filter((e) => e && e.includes('@'));
   if (validEmails.length === 0) {
     console.log('No admin emails found — skipping pending-user notification');
     return;
