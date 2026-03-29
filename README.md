@@ -157,10 +157,3 @@ TW_Hosting/
 1. Edit config/sites.yml
 2. Run node scripts/generate-config.js
 3. Restart docker compose
-
-## What Comes Next
-
-Planned next steps from your full plan:
-- OAuth via Passport.js
-- User roles in SQLite
-- Semantic version tagging and static history views
