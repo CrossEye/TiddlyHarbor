@@ -7,7 +7,7 @@ OAuth, and email notifications.
 
 ## 1. Prerequisites
 
-- A VPS (Hetzner CX22 ~$4/mo, DigitalOcean $6/mo, or similar)
+- A VPS (Hetzner CX22 ~$6/mo, DigitalOcean $8/mo, or similar)
 - A domain name with DNS access
 - SSH access to the server
 - Docker and Docker Compose installed on the server
