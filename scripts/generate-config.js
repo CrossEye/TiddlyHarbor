@@ -61,6 +61,7 @@ function buildCompose(config) {
         `QUIESCENCE_MINUTES=${toEnvValue(site.quiescence_minutes ?? config.defaults.quiescence_minutes ?? 5)}`,
         `MAX_COMMIT_INTERVAL_MINUTES=${toEnvValue(site.max_commit_interval_minutes ?? config.defaults.max_commit_interval_minutes ?? 60)}`,
         `GIT_REMOTE_URL=${site.repo || ''}`,
+        `PUBLIC_READ=${toEnvValue(site.public_read ?? config.defaults.public_read ?? true)}`,
         'OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}',
         'OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}',
         'OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}'
@@ -72,11 +73,18 @@ function buildCompose(config) {
 
   services.caddy = {
     image: 'caddy:2-alpine',
-    ports: ['80:80'],
-    volumes: ['./Caddyfile:/etc/caddy/Caddyfile:ro'],
+    ports: ['80:80', '443:443'],
+    volumes: [
+      './Caddyfile:/etc/caddy/Caddyfile:ro',
+      'caddy_data:/data',
+      'caddy_config:/config'
+    ],
     depends_on: Object.keys(services).filter((name) => name.startsWith('wiki-')),
     restart: 'unless-stopped'
   };
+
+  volumes.caddy_data = null;
+  volumes.caddy_config = null;
 
   return {
     services,

@@ -999,6 +999,24 @@ app.get(['/health', `${sitePrefix}/health`], (req, res) => {
   });
 });
 
+// When public_read is disabled, require authentication for all requests
+// (placed after all explicit routes so login/OAuth/status remain accessible)
+if (process.env.PUBLIC_READ === 'false') {
+  app.use((req, res, next) => {
+    const ep = getEffectivePath(req);
+    if (ep.startsWith('/login') || ep.startsWith('/auth/') ||
+        ep === '/status' || ep === '/health') {
+      return next();
+    }
+    const session = getWriterSession(req);
+    if (session) return next();
+    if (isTiddlyWikiSyncRequest(req)) {
+      return res.status(401).json({ error: 'login-required', loginPath: `${sitePrefix}/login` });
+    }
+    return res.redirect(`${sitePrefix}/login?next=${encodeURIComponent(req.originalUrl)}`);
+  });
+}
+
 app.use(requireBasicWriteAuth({
   authenticateCredentials: (username, password) => authenticateWriter(username, password)
 }));

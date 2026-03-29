@@ -15,6 +15,7 @@ services:
       - QUIESCENCE_MINUTES=5
       - MAX_COMMIT_INTERVAL_MINUTES=60
       - GIT_REMOTE_URL=
+      - PUBLIC_READ=true
       - OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}
       - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}
       - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}
@@ -37,6 +38,7 @@ services:
       - QUIESCENCE_MINUTES=5
       - MAX_COMMIT_INTERVAL_MINUTES=60
       - GIT_REMOTE_URL=
+      - PUBLIC_READ=true
       - OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}
       - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}
       - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}
@@ -47,8 +49,11 @@ services:
     image: caddy:2-alpine
     ports:
       - '80:80'
+      - '443:443'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - wiki-main
       - wiki-sandbox
@@ -56,3 +61,5 @@ services:
 volumes:
   wiki_main_data: null
   wiki_sandbox_data: null
+  caddy_data: null
+  caddy_config: null

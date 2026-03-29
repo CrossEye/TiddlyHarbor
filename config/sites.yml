@@ -4,12 +4,10 @@ defaults:
   public_read: true
   git_autosave_enabled: true
   git_autopush: false
-
 sites:
   main:
     path: /main
-    repo: ""
-
+    repo: ''
   sandbox:
     path: /sandbox
-    repo: ""
+    repo: ''

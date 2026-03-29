@@ -5,7 +5,8 @@
   "description": "TiddlyHarbor config generation utilities",
   "scripts": {
     "setup": "node scripts/generate-config.js",
-    "setup:check": "node scripts/generate-config.js --check"
+    "setup:check": "node scripts/generate-config.js --check",
+    "manage": "node scripts/manage-sites.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

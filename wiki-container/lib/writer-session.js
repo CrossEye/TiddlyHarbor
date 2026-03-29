@@ -12,8 +12,10 @@ function decodeBase64Url(value) {
 }
 
 function getSessionSecret() {
-  return process.env.WRITER_SESSION_SECRET
+  const base = process.env.WRITER_SESSION_SECRET
     || `${process.env.WIKI_NAME || 'main'}:${process.env.BASIC_AUTH_USER || 'admin'}:${process.env.BASIC_AUTH_PASS || 'change-me'}`;
+  const wikiName = process.env.WIKI_NAME || 'main';
+  return crypto.createHmac('sha256', base).update(wikiName).digest();
 }
 
 function signPayload(payload) {
