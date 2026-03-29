@@ -8,6 +8,12 @@ const PROVIDERS = {
     tokenURL: 'https://github.com/login/oauth/access_token',
     scope: ['user:email'],
     envPrefix: 'OAUTH_GITHUB'
+  },
+  google: {
+    name: 'google',
+    displayName: 'Google',
+    scope: ['openid', 'email', 'profile'],
+    envPrefix: 'OAUTH_GOOGLE'
   }
 };
 

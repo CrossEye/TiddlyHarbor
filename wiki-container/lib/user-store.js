@@ -452,6 +452,14 @@ class UserStore {
       role: user.role
     };
   }
+
+  getAdminEmails() {
+    const output = this.sqliteQuery(
+      "SELECT email FROM users WHERE role = 'admin' AND is_active = 1 AND email IS NOT NULL AND email != '';"
+    );
+    if (!output) return [];
+    return output.split(/\r?\n/).filter(Boolean).map((line) => line.trim());
+  }
 }
 
 module.exports = {

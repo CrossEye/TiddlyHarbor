@@ -2,6 +2,7 @@
 
 const passport = require('passport');
 const { Strategy: GitHubStrategy } = require('passport-github2');
+const { Strategy: GoogleStrategy } = require('passport-google-oauth20');
 const { getCallbackUrl } = require('./oauth-config');
 
 function createGitHubStrategy(provider, sitePrefix) {
@@ -27,8 +28,32 @@ function createGitHubStrategy(provider, sitePrefix) {
   );
 }
 
+function createGoogleStrategy(provider, sitePrefix) {
+  return new GoogleStrategy(
+    {
+      clientID: provider.clientId,
+      clientSecret: provider.clientSecret,
+      callbackURL: getCallbackUrl('google', sitePrefix),
+      scope: provider.scope || ['openid', 'email', 'profile']
+    },
+    (accessToken, refreshToken, profile, done) => {
+      const email = profile.emails && profile.emails.length > 0
+        ? profile.emails[0].value
+        : null;
+
+      done(null, {
+        provider: 'google',
+        oauthId: String(profile.id),
+        email,
+        displayName: profile.displayName || null
+      });
+    }
+  );
+}
+
 const strategyFactories = {
-  github: createGitHubStrategy
+  github: createGitHubStrategy,
+  google: createGoogleStrategy
 };
 
 function initializeStrategies(enabledProviders, sitePrefix) {

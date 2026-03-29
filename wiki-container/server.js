@@ -13,6 +13,7 @@ const { hasAdminAccess, hasWriteAccess, UserStore } = require('./lib/user-store'
 const { getEnabledProviders } = require('./lib/oauth-config');
 const { initializeStrategies, passport } = require('./lib/oauth-strategies');
 const { buildExpiredOAuthStateCookie, buildOAuthStateCookie, readOAuthStateCookie } = require('./lib/oauth-state');
+const { notifyAdminsOfPendingUser } = require('./lib/notifications');
 const tiddlyWikiVersion = require('tiddlywiki/package.json').version;
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -37,7 +38,13 @@ try {
   console.error('UserStore initialization failed:', err.message);
 }
 
-const enabledOAuthProviders = getEnabledProviders();
+let enabledOAuthProviders = getEnabledProviders();
+const allowedProviderNames = process.env.OAUTH_PROVIDERS
+  ? process.env.OAUTH_PROVIDERS.split(',').map((s) => s.trim()).filter(Boolean)
+  : null;
+if (allowedProviderNames) {
+  enabledOAuthProviders = enabledOAuthProviders.filter((p) => allowedProviderNames.includes(p.name));
+}
 if (enabledOAuthProviders.length > 0) {
   initializeStrategies(enabledOAuthProviders, sitePrefix);
   console.log(`OAuth providers enabled: ${enabledOAuthProviders.map((p) => p.name).join(', ')}`);
@@ -457,6 +464,10 @@ app.get([`${sitePrefix}/auth/:provider/callback`, '/auth/:provider/callback'], (
           displayName: oauthProfile.displayName
         });
         console.log(`New OAuth user created: ${user.username} (${oauthProfile.provider}) — pending approval`);
+        notifyAdminsOfPendingUser({
+          user, wikiName, sitePrefix,
+          adminEmails: userStore.getAdminEmails()
+        }).catch((err) => console.error('Notification error:', err.message));
       } catch (createErr) {
         console.error(`Failed to create OAuth user:`, createErr.message);
         return res.redirect(`${sitePrefix}/login?error=oauth`);

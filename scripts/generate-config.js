@@ -64,7 +64,15 @@ function buildCompose(config) {
         `PUBLIC_READ=${toEnvValue(site.public_read ?? config.defaults.public_read ?? true)}`,
         'OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}',
         'OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}',
-        'OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}'
+        'OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET:-}',
+        'OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID:-}',
+        'OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET:-}',
+        `OAUTH_PROVIDERS=${(site.oauth_providers ?? config.defaults.oauth_providers ?? []).join(',')}`,
+        'SMTP_HOST=${SMTP_HOST:-}',
+        'SMTP_PORT=${SMTP_PORT:-587}',
+        'SMTP_USER=${SMTP_USER:-}',
+        'SMTP_PASS=${SMTP_PASS:-}',
+        'SMTP_FROM=${SMTP_FROM:-}'
       ],
       volumes: [`${volumeName}:/app/wiki`],
       restart: 'unless-stopped'

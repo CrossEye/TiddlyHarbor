@@ -4,6 +4,7 @@ defaults:
   public_read: true
   git_autosave_enabled: true
   git_autopush: false
+  # oauth_providers: [github, google]  # omit to allow all available providers
 sites:
   main:
     path: /main
