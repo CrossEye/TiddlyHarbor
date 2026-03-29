@@ -112,34 +112,31 @@ function ensureReadOnlyStylesheet(wikiPath) {
   fs.writeFileSync(configPath, content, 'utf8');
 }
 
-// A page-control button that shows a "sign in" link for anonymous / readonly
-// visitors.  Uses the locked-padlock icon and links to the login page via a
-// simple relative URL (resolves against the wiki's path-prefix base).
-function ensureSignInButton(wikiPath) {
+// Hide the padlock login button from the page toolbar and clean up legacy
+// tiddlers from earlier approaches.
+function ensureLoginOverrides(wikiPath) {
   const tiddlersPath = path.join(wikiPath, 'tiddlers');
-  const configPath = path.join(tiddlersPath, '$__tiddlyharbor_ui_Buttons_sign-in.tid');
-  const content = [
-    'title: $:/tiddlyharbor/ui/Buttons/sign-in',
-    'tags: $:/tags/PageControls',
-    'caption: {{$:/core/images/locked-padlock}} sign in',
-    'description: Sign in for write access',
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+
+  // Remove legacy sign-in button tiddlers
+  for (const file of [
+    '$__tiddlyharbor_ui_Buttons_sign-in.tid',
+    '$__core_ui_Buttons_login.tid'
+  ]) {
+    const p = path.join(tiddlersPath, file);
+    if (fs.existsSync(p)) { fs.unlinkSync(p); }
+  }
+
+  // Hide the padlock button from the page controls toolbar
+  const visPath = path.join(tiddlersPath,
+    '$__config_PageControlButtons_Visibility_$__core_ui_Buttons_login.tid');
+  const visContent = [
+    'title: $:/config/PageControlButtons/Visibility/$:/core/ui/Buttons/login',
     '',
-    '\\whitespace trim',
-    '<$list filter="[{$:/status/IsReadOnly}match[yes]]" variable="ignore">',
-    '<a href="login" class="tc-btn-invisible" title="Sign in for write access" aria-label="sign in" style="text-decoration:none;">',
-    '<%if [<tv-config-toolbar-icons>match[yes]] %>',
-    '{{$:/core/images/locked-padlock}}',
-    '<%endif%>',
-    '<%if [<tv-config-toolbar-text>match[yes]] %>',
-    '<span class="tc-btn-text">sign in</span>',
-    '<%endif%>',
-    '</a>',
-    '</$list>',
+    'hide',
     ''
   ].join('\n');
-
-  fs.mkdirSync(tiddlersPath, { recursive: true });
-  fs.writeFileSync(configPath, content, 'utf8');
+  fs.writeFileSync(visPath, visContent, 'utf8');
 }
 
 function removeLegacyVersionTiddlers(wikiPath) {
@@ -184,7 +181,7 @@ function startTiddlyWiki(wikiPath, port, wikiName) {
   ensurePathPrefixConfig(wikiPath, wikiName);
   ensureSyncFilterConfig(wikiPath);
   ensureReadOnlyStylesheet(wikiPath);
-  ensureSignInButton(wikiPath);
+  ensureLoginOverrides(wikiPath);
   ensurePluginRegistered(wikiPath);
   removeLegacyVersionTiddlers(wikiPath);
   removeLegacyReadOnlyNoticeTiddler(wikiPath);
