@@ -2,14 +2,32 @@ title: $:/plugins/tiddlyharbor/version/styles
 tags: $:/tags/Stylesheet
 type: text/vnd.tiddlywiki
 
-.th-version-panel { padding: 0.5em 0; }
-.th-version-display { margin-bottom: 0.75em; font-size: 0.95em; }
-.th-version-admin { border-top: 1px solid <<colour tiddler-controls-foreground>>; padding-top: 0.75em; }
-.th-version-bump { margin-top: 0.75em; }
-.th-version-bump-label { font-size: 0.85em; font-weight: bold; margin-bottom: 0.35em; }
-.th-bump-btn { display: inline-block; margin-right: 0.5em; padding: 0.25em 0.75em;
-  border: 1px solid <<colour tiddler-controls-foreground>>; border-radius: 0.3em;
-  font-size: 0.85em; cursor: pointer; }
-.th-bump-btn:hover { background: <<colour tiddler-controls-foreground>>; color: <<colour tiddler-background>>; }
-.th-version-status { margin-top: 0.75em; font-style: italic; font-size: 0.85em;
-  color: <<colour muted-foreground>>; }
+\rules only filteredtranscludeinline macrodef macrocallinline
+
+:root { --th-quiescence-duration: 300s; }
+
+.th-version-bar { line-height: 1.2; }
+
+.th-version-label,
+.th-version-toggle { font-family: monospace; font-size: 1em; opacity: 0.6; display: inline-block; padding: 0; margin: 0; }
+.th-version-toggle:hover { opacity: 1; }
+.th-version-toggle-wrap { display: inline; }
+.th-version-label { margin-block-start: 1em;}
+
+.th-save-dot { display: inline; font-size: 2.6em; line-height: 1; vertical-align: middle; margin-left: 0.25em;
+  padding: 0; border: none; cursor: pointer; background: none; margin-top: -0.2em;}
+
+/* Pending: snap to red instantly */
+.th-save-dot-pending { color: #c0392b; transition: none; }
+
+/* Waiting: fading red-to-green over the quiescence interval (applied by JS shortly after pending) */
+.th-save-dot-waiting { color: #27ae60; transition: color var(--th-quiescence-duration) linear; }
+
+/* Saved: confirmed committed, snap to green instantly */
+.th-save-dot-saved { color: #27ae60; transition: none; }
+
+/* Default / unknown state before first status load */
+.th-save-dot- { color: <<colour muted-foreground>>; }
+
+.th-bump-dropdown { min-width: 14em; }
+.th-bump-option { display: block; width: 100%; text-align: left; padding: 0.35em 0.75em; font-size: 0.9em; }

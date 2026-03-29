@@ -41,6 +41,7 @@ class GitSync {
     this.initialized = false;
     this.committing = false;
     this.cachedVersion = '0.0.0';
+    this.onCommit = options.onCommit || null;
 
     this.git = simpleGit({ baseDir: this.repoPath });
   }
@@ -123,6 +124,10 @@ class GitSync {
       }
 
       this.dirty = false;
+
+      if (this.onCommit) {
+        try { this.onCommit(); } catch (_) { /* best-effort */ }
+      }
     } finally {
       this.committing = false;
 

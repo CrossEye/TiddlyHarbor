@@ -15,6 +15,13 @@ exports.name = "tiddlyharbor-version-messages";
 exports.after = ["startup"];
 exports.synchronous = true;
 
+function bumpSemver(version, type) {
+	var parts = (version || "0.0.0").split(".").map(Number);
+	if (type === "major") return (parts[0] + 1) + ".0.0";
+	if (type === "minor") return parts[0] + "." + (parts[1] + 1) + ".0";
+	return parts[0] + "." + parts[1] + "." + (parts[2] + 1);
+}
+
 function getBaseUrl() {
 	return location.pathname.replace(/\/+$/, "") + "/";
 }
@@ -48,20 +55,44 @@ function apiPost(endpoint, body, onSuccess) {
 exports.startup = function () {
 	if (!$tw.browser) { return; }
 
+	// Intercept TW's built-in tm-login message so the "Login" link in the
+	// server-status dropdown navigates to our Express login page.
+	$tw.rootWidget.addEventListener("tm-login", function () {
+		var base = location.pathname.replace(/\/+$/, "");
+		window.location.href = base + "/login";
+		return false;
+	});
+
+	// Intercept tm-logout: clear role immediately (hides version segment
+	// reactively) then redirect to our Express logout endpoint.
+	$tw.rootWidget.addEventListener("tm-logout", function () {
+		$tw.wiki.addTiddler({ title: "$:/status/user-role", text: "anonymous" });
+		var base = location.pathname.replace(/\/+$/, "");
+		window.location.href = base + "/logout";
+		return false;
+	});
+
 	$tw.rootWidget.addEventListener("tm-harbor-force-save", function () {
-		setStatus("Saving...");
+		// Snap to green immediately on click
+		$tw.wiki.addTiddler({ title: "$:/temp/tiddlyharbor/save-state", text: "saved" });
 		apiPost("api/save", {}, function (data) {
-			setStatus(data.committed ? "Saved!" : (data.message || "Nothing to commit"));
+			if (data.committed) {
+				$tw.wiki.addTiddler({ title: "$:/temp/tiddlyharbor/dirty", text: "no" });
+			}
 		});
 	});
 
 	$tw.rootWidget.addEventListener("tm-harbor-bump-version", function (event) {
 		var bump = event.paramObject && event.paramObject.bump;
 		if (!bump) { setStatus("Error: no bump type"); return; }
+		var current = $tw.wiki.getTiddlerText("$:/temp/tiddlyharbor/version") || "0.0.0";
+		var target = bumpSemver(current, bump);
+		if (!confirm("Are you sure you want to bump the version to v" + target + "? (This cannot be undone.)")) { return; }
 		setStatus("Bumping " + bump + "...");
 		apiPost("api/version", { bump: bump }, function (data) {
 			$tw.wiki.addTiddler({ title: "$:/temp/tiddlyharbor/version", text: data.newVersion || "0.0.0" });
-			setStatus("Bumped to v" + data.newVersion + " (was " + data.previousVersion + ")");
+			$tw.wiki.addTiddler({ title: "$:/temp/tiddlyharbor/dirty", text: "no" });
+			$tw.wiki.addTiddler({ title: "$:/temp/tiddlyharbor/save-state", text: "saved" });
 		});
 	});
 };

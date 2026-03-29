@@ -1,4 +1,6 @@
+const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const express = require('express');
 const dotenv = require('dotenv');
 const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
@@ -43,18 +45,48 @@ if (enabledOAuthProviders.length > 0) {
   console.log('No OAuth providers configured — password-only auth');
 }
 
+// PUT a tiddler directly into TW's in-memory store via its HTTP API.
+function putTiddlerToTW(title, fields) {
+  const body = JSON.stringify(fields);
+  const urlPath = `/${wikiName}/recipes/default/tiddlers/${encodeURIComponent(title)}`;
+  const req = http.request({
+    hostname: '127.0.0.1',
+    port: twPort,
+    path: urlPath,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  });
+  req.on('error', () => { /* best-effort */ });
+  req.end(body);
+}
+
 const gitSync = new GitSync(wikiPath, {
   enabled: process.env.GIT_AUTOSAVE_ENABLED !== 'false',
   autoPush: process.env.GIT_AUTOPUSH === 'true',
   quiescenceMs: Number(process.env.QUIESCENCE_MINUTES || 5) * 60 * 1000,
   maxIntervalMs: Number(process.env.MAX_COMMIT_INTERVAL_MINUTES || 60) * 60 * 1000,
   remoteUrl: process.env.GIT_REMOTE_URL || '',
-  wikiName
+  wikiName,
+  onCommit() {
+    putTiddlerToTW('$:/tiddlyharbor/git-status', {
+      text: new Date().toISOString(),
+      type: 'text/plain'
+    });
+  }
 });
 
 gitSync.initialize().catch((err) => {
   console.error('GitSync initialization failed:', err.message);
 });
+
+// Ensure the git-status tiddler is excluded from git commits
+const tiddlersPath = path.join(wikiPath, 'tiddlers');
+const gitignorePath = path.join(tiddlersPath, '.gitignore');
+const gitignoreEntry = '$__tiddlyharbor_git-status.tid\n';
+if (!fs.existsSync(gitignorePath) || !fs.readFileSync(gitignorePath, 'utf8').includes(gitignoreEntry.trim())) {
+  fs.mkdirSync(tiddlersPath, { recursive: true });
+  fs.appendFileSync(gitignorePath, gitignoreEntry, 'utf8');
+}
 
 const twProcess = startTiddlyWiki(wikiPath, twPort, wikiName);
 
@@ -262,6 +294,8 @@ function getStatusPayload(req) {
     read_only: !canWrite,
     'user-role': authenticated ? session.role : 'anonymous',
     wiki_version: gitSync.getCachedVersion(),
+    wiki_dirty: gitSync.dirty,
+    quiescence_seconds: Math.round(gitSync.quiescenceMs / 1000),
     logout_is_available: true,
     space: {
       recipe: 'default'

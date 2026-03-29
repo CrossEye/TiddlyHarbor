@@ -1,46 +1,54 @@
-title: $:/plugins/tiddlyharbor/version/sidebar
-tags: $:/tags/SideBar
-caption: Version
+title: $:/plugins/tiddlyharbor/version/sidebar-segment
+tags: $:/tags/SideBarSegment
+list-after: $:/core/ui/SideBarSegments/site-subtitle
 type: text/vnd.tiddlywiki
 
 \whitespace trim
 
-<div class="th-version-panel">
+<div class="th-version-bar">
 
-<div class="th-version-display">
-Wiki version: <strong>v{{$:/temp/tiddlyharbor/version}}</strong>
-</div>
+<$list filter="[{$:/status/user-role}match[admin]]" variable="ignore"
+  emptyMessage="""<span class="th-version-label">v{{$:/temp/tiddlyharbor/version}}<$list filter="[{$:/status/user-role}match[writer]] [{$:/status/user-role}match[admin]] +[limit[1]]" variable="ignore"><$button class={{{ [[tc-btn-invisible th-save-dot th-save-dot-]addsuffix{$:/temp/tiddlyharbor/save-state}] }}} tooltip="Click to save now">&#x2022;</$button></$list></span>""">
 
-<$list filter="[{$:/status/user-role}match[admin]]" variable="ignore">
-
-<div class="th-version-admin">
-
-<$button class="tc-btn-invisible tc-tiddlylink" tooltip="Force save all pending changes now">
+<span class="th-version-toggle-wrap">
+<$button popup="$:/state/tiddlyharbor/bump-popup" class="tc-btn-invisible th-version-toggle"
+  tooltip="Click to change version">
+v{{$:/temp/tiddlyharbor/version}}
+</$button>
+<$button class={{{ [[tc-btn-invisible th-save-dot th-save-dot-]addsuffix{$:/temp/tiddlyharbor/save-state}] }}} tooltip="Click to save now">
 <$action-sendmessage $message="tm-harbor-force-save"/>
-{{$:/core/images/save-button}} Save Now
+&#x2022;
+</$button>
+</span>
+
+<$reveal type="popup" state="$:/state/tiddlyharbor/bump-popup" animate="yes">
+<div class="th-bump-dropdown tc-drop-down">
+
+<$button class="tc-btn-invisible th-bump-option">
+<$action-deletetiddler $tiddler="$:/state/tiddlyharbor/bump-popup"/>
+Stay on v{{$:/temp/tiddlyharbor/version}}&nbsp;(current)
 </$button>
 
-<div class="th-version-bump">
-<div class="th-version-bump-label">Bump version:</div>
-<$button class="th-bump-btn" tooltip="Bump patch version">
+<$button class="tc-btn-invisible th-bump-option">
+<$action-deletetiddler $tiddler="$:/state/tiddlyharbor/bump-popup"/>
 <$action-sendmessage $message="tm-harbor-bump-version" bump="patch"/>
-Patch
+Bump to v<$macrocall $name="bump-version" version={{$:/temp/tiddlyharbor/version}} type="patch"/>&nbsp;(patch)
 </$button>
-<$button class="th-bump-btn" tooltip="Bump minor version">
+
+<$button class="tc-btn-invisible th-bump-option">
+<$action-deletetiddler $tiddler="$:/state/tiddlyharbor/bump-popup"/>
 <$action-sendmessage $message="tm-harbor-bump-version" bump="minor"/>
-Minor
+Bump to v<$macrocall $name="bump-version" version={{$:/temp/tiddlyharbor/version}} type="minor"/>&nbsp;(minor)
 </$button>
-<$button class="th-bump-btn" tooltip="Bump major version">
+
+<$button class="tc-btn-invisible th-bump-option">
+<$action-deletetiddler $tiddler="$:/state/tiddlyharbor/bump-popup"/>
 <$action-sendmessage $message="tm-harbor-bump-version" bump="major"/>
-Major
+Bump to v<$macrocall $name="bump-version" version={{$:/temp/tiddlyharbor/version}} type="major"/>&nbsp;(major)
 </$button>
-</div>
-
-<$list filter="[{$:/temp/tiddlyharbor/version-status}!match[]]" variable="ignore">
-<div class="th-version-status">{{$:/temp/tiddlyharbor/version-status}}</div>
-</$list>
 
 </div>
+</$reveal>
 
 </$list>
 
