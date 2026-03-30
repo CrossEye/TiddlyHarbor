@@ -8,7 +8,7 @@ const { renderAdminPage, renderWriterLoginPage } = require('./lib/auth-pages');
 const { ensureWikiInitialized, ensurePathPrefixConfig, startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
-const { GitSync } = require('./lib/git-sync');
+const { cloneIfNeeded, GitSync } = require('./lib/git-sync');
 const { hasAdminAccess, hasWriteAccess, UserStore } = require('./lib/user-store');
 const { getEnabledProviders } = require('./lib/oauth-config');
 const { initializeStrategies, passport } = require('./lib/oauth-strategies');
@@ -26,7 +26,9 @@ const wikiPath = process.env.WIKI_PATH || path.join(__dirname, 'wiki');
 const wikiName = process.env.WIKI_NAME || 'main';
 const sitePrefix = `/${wikiName}`;
 
-// Initialize wiki folder before anything writes into it
+// Clone remote repo if this is a fresh wiki with a configured remote.
+// Must run before ensureWikiInitialized so the cloned tiddlywiki.info is found.
+cloneIfNeeded(wikiPath, process.env.GIT_REMOTE_URL || '', process.env.GIT_BRANCH || 'main');
 ensureWikiInitialized(wikiPath);
 ensurePathPrefixConfig(wikiPath, wikiName);
 
@@ -79,6 +81,7 @@ const gitSync = new GitSync(wikiPath, {
   quiescenceMs: Number(process.env.QUIESCENCE_MINUTES || 5) * 60 * 1000,
   maxIntervalMs: Number(process.env.MAX_COMMIT_INTERVAL_MINUTES || 60) * 60 * 1000,
   remoteUrl: process.env.GIT_REMOTE_URL || '',
+  branch: process.env.GIT_BRANCH || 'main',
   wikiName,
   onCommit() {
     putTiddlerToTW('$:/tiddlyharbor/git-status', {

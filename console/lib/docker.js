@@ -73,4 +73,17 @@ async function applyConfig(hostProjectDir) {
   };
 }
 
-module.exports = { getContainerStatus, applyConfig };
+async function stopAndRemoveContainer(projectName, serviceName) {
+  // Stop container first, then remove it
+  const name = `${projectName}-${serviceName}-1`;
+  await execPromise(`docker stop ${name}`);
+  await execPromise(`docker rm ${name}`);
+}
+
+async function deleteVolume(projectName, siteName) {
+  const volumeName = `${projectName}_wiki_${siteName}_data`;
+  const result = await execPromise(`docker volume rm ${volumeName}`);
+  return result;
+}
+
+module.exports = { getContainerStatus, applyConfig, stopAndRemoveContainer, deleteVolume };

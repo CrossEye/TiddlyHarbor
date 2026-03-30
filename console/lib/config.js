@@ -38,8 +38,20 @@ function parseFormToSiteConfig(body) {
     site.domain = domains.length === 1 ? domains[0] : domains;
   }
 
-  if (body.repo && body.repo.trim()) {
-    site.repo = body.repo.trim();
+  // Combine repo URL + token into a single authenticated URL for git
+  const repoUrl = (body.git_repo_url || '').trim();
+  const repoToken = (body.git_token || '').trim();
+  if (repoUrl) {
+    if (repoToken) {
+      // Insert token: https://github.com/... → https://TOKEN@github.com/...
+      site.repo = repoUrl.replace(/^(https?:\/\/)/, `$1${repoToken}@`);
+    } else {
+      site.repo = repoUrl;
+    }
+  }
+
+  if (body.git_branch && body.git_branch.trim()) {
+    site.git_branch = body.git_branch.trim();
   }
 
   if (body.basic_auth_user && body.basic_auth_user.trim()) {

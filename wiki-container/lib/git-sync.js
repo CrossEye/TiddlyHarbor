@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { simpleGit } = require('simple-git');
 
 const SEMVER_TAG_RE = /^v(\d+)\.(\d+)\.(\d+)$/;
@@ -25,6 +26,66 @@ function bumpSemver(current, type) {
   return `${major}.${minor}.${patch + 1}`;
 }
 
+/**
+ * Fetch a remote repo into wikiPath if the wiki hasn't been initialized yet.
+ * Uses init+fetch+checkout instead of clone, because Docker volume mount
+ * points are non-empty directories (they contain filesystem artifacts).
+ *
+ * Must be called BEFORE ensureWikiInitialized so the fetched tiddlywiki.info
+ * is found and --init server is skipped.
+ *
+ * Synchronous (uses spawnSync) so it fits into the existing startup sequence.
+ * Returns true if a fetch was performed, false otherwise.
+ */
+function cloneIfNeeded(wikiPath, remoteUrl, branch) {
+  if (!remoteUrl) {
+    return false;
+  }
+
+  branch = branch || 'main';
+
+  const infoPath = path.join(wikiPath, 'tiddlywiki.info');
+  if (fs.existsSync(infoPath)) {
+    return false;   // wiki already exists — nothing to clone
+  }
+
+  const dotGitPath = path.join(wikiPath, '.git');
+  if (fs.existsSync(dotGitPath)) {
+    return false;   // git repo already present
+  }
+
+  const safeUrl = remoteUrl.replace(/\/\/[^@]+@/, '//<token>@');
+  console.log(`Cloning ${safeUrl} (branch: ${branch}) into ${wikiPath}...`);
+  fs.mkdirSync(wikiPath, { recursive: true });
+
+  const run = (args) => spawnSync('git', args, {
+    cwd: wikiPath, stdio: 'inherit', timeout: 120000
+  });
+
+  if (run(['init', '-b', branch]).status !== 0) {
+    console.error('git init failed');
+    return false;
+  }
+
+  if (run(['remote', 'add', 'origin', remoteUrl]).status !== 0) {
+    console.error('git remote add failed');
+    return false;
+  }
+
+  if (run(['fetch', 'origin', branch]).status !== 0) {
+    console.error('git fetch failed — remote may be empty or unreachable');
+    return false;
+  }
+
+  if (run(['checkout', `origin/${branch}`, '-b', branch, '--force']).status !== 0) {
+    console.error('git checkout failed');
+    return false;
+  }
+
+  console.log('Clone complete.');
+  return true;
+}
+
 class GitSync {
   constructor(repoPath, options = {}) {
     this.repoPath = repoPath;
@@ -33,6 +94,7 @@ class GitSync {
     this.quiescenceMs = options.quiescenceMs ?? 5 * 60 * 1000;
     this.maxIntervalMs = options.maxIntervalMs ?? 60 * 60 * 1000;
     this.remoteUrl = options.remoteUrl || '';
+    this.branch = options.branch || 'main';
     this.wikiName = options.wikiName || 'wiki';
 
     this.dirty = false;
@@ -55,8 +117,16 @@ class GitSync {
 
     const dotGitPath = path.join(this.repoPath, '.git');
     if (!fs.existsSync(dotGitPath)) {
-      await this.git.init();
+      await this.git.init(['-b', this.branch]);
     }
+
+    // Ensure we're on the configured branch (e.g. after clone landed on a different default)
+    try {
+      const current = (await this.git.revparse(['--abbrev-ref', 'HEAD'])).trim();
+      if (current && current !== this.branch) {
+        await this.git.checkout(['-B', this.branch]);
+      }
+    } catch (_) { /* first commit hasn't happened yet — branch switch will work on next push */ }
 
     await this.git.addConfig('user.name', process.env.GIT_AUTHOR_NAME || 'TiddlyHarbor Bot');
     await this.git.addConfig('user.email', process.env.GIT_AUTHOR_EMAIL || 'tiddlyharbor@example.local');
@@ -66,6 +136,13 @@ class GitSync {
       const origin = remotes.find((remote) => remote.name === 'origin');
       if (!origin) {
         await this.git.addRemote('origin', this.remoteUrl);
+      }
+
+      // Fetch remote tags so the version UI reflects tags created elsewhere
+      try {
+        await this.git.fetch('origin', ['--tags']);
+      } catch (fetchErr) {
+        console.error('GitSync tag fetch failed:', fetchErr.message);
       }
     }
 
@@ -120,7 +197,18 @@ class GitSync {
       await this.git.commit(`Auto-save (${reason}) [${this.wikiName}] ${new Date().toISOString()}`);
 
       if (this.autoPush && this.remoteUrl) {
-        await this.git.push('origin');
+        try {
+          // Pull first to integrate any remote changes (e.g. from another clone)
+          try {
+            await this.git.pull('origin', this.branch, ['--rebase', '--autostash']);
+          } catch (pullErr) {
+            console.error('GitSync pull before push failed:', pullErr.message);
+          }
+          await this.git.push('origin', this.branch, ['--set-upstream']);
+          console.log(`GitSync pushed to origin/${this.branch}`);
+        } catch (pushErr) {
+          console.error('GitSync push failed:', pushErr.message);
+        }
       }
 
       this.dirty = false;
@@ -214,8 +302,15 @@ class GitSync {
 
     await this.git.addAnnotatedTag(tagName, message);
 
-    if (this.autoPush && this.remoteUrl) {
-      await this.git.push('origin', tagName);
+    // Always push tags when a remote is configured — version tags are
+    // intentional releases, unlike auto-save commits which respect autoPush.
+    if (this.remoteUrl) {
+      try {
+        await this.git.push('origin', tagName);
+        console.log(`GitSync pushed tag ${tagName} to origin`);
+      } catch (pushErr) {
+        console.error(`GitSync tag push failed: ${pushErr.message}`);
+      }
     }
 
     this.cachedVersion = next;
@@ -237,5 +332,6 @@ class GitSync {
 }
 
 module.exports = {
+  cloneIfNeeded,
   GitSync
 };

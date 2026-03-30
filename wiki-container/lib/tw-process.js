@@ -24,6 +24,23 @@ function ensureWikiInitialized(wikiPath) {
   if (init.status !== 0) {
     throw new Error('Failed to initialize TiddlyWiki server edition');
   }
+
+  // Import tiddlers from a single-file wiki if an import file exists
+  const wikiName = process.env.WIKI_NAME || path.basename(wikiPath);
+  const importFile = path.join('/app/config/imports', `${wikiName}.html`);
+  if (fs.existsSync(importFile)) {
+    console.log(`Importing tiddlers from ${importFile}...`);
+    const load = spawnSync(bin, [wikiPath, '--load', importFile], {
+      stdio: 'inherit'
+    });
+    if (load.status !== 0) {
+      console.error('Warning: --load failed, wiki will start empty');
+    } else {
+      console.log('Import complete.');
+    }
+    // Clean up the import file
+    try { fs.unlinkSync(importFile); } catch (_) {}
+  }
 }
 
 function ensurePathPrefixConfig(wikiPath, wikiName) {

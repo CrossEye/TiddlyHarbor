@@ -45,6 +45,7 @@ function buildCompose(config) {
     volumes[volumeName] = null;
 
     services[serviceName] = {
+      image: 'tiddlyharbor-wiki',
       build: {
         context: './wiki-container'
       },
@@ -61,6 +62,7 @@ function buildCompose(config) {
         `QUIESCENCE_MINUTES=${toEnvValue(site.quiescence_minutes ?? config.defaults.quiescence_minutes ?? 5)}`,
         `MAX_COMMIT_INTERVAL_MINUTES=${toEnvValue(site.max_commit_interval_minutes ?? config.defaults.max_commit_interval_minutes ?? 60)}`,
         `GIT_REMOTE_URL=${site.repo || ''}`,
+        `GIT_BRANCH=${site.git_branch ?? config.defaults.git_branch ?? 'main'}`,
         `PUBLIC_READ=${toEnvValue(site.public_read ?? config.defaults.public_read ?? true)}`,
         'OAUTH_EXTERNAL_BASE_URL=${OAUTH_EXTERNAL_BASE_URL:-}',
         'OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID:-}',
@@ -75,7 +77,10 @@ function buildCompose(config) {
         'SMTP_PASS=${SMTP_PASS:-}',
         'SMTP_FROM=${SMTP_FROM:-}'
       ],
-      volumes: [`${volumeName}:/app/wiki`],
+      volumes: [
+        `${volumeName}:/app/wiki`,
+        './config:/app/config:ro'
+      ],
       restart: 'unless-stopped'
     };
   }

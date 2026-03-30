@@ -1,11 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
+const multer = require('multer');
 const path = require('path');
 
 const { loadConfig, addSite, updateSite, removeSite, parseFormToSiteConfig } = require('./lib/config');
-const { getContainerStatus, applyConfig } = require('./lib/docker');
+const { getContainerStatus, applyConfig, stopAndRemoveContainer, deleteVolume } = require('./lib/docker');
 const { setBasePath, renderDashboard, renderAddForm, renderEditForm, renderRemoveConfirm, renderApplyResult } = require('./lib/pages');
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -28,6 +30,10 @@ if (!CONSOLE_PASS) {
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
+
+const IMPORTS_DIR = path.join(path.dirname(SITES_PATH), 'imports');
+fs.mkdirSync(IMPORTS_DIR, { recursive: true });
+const upload = multer({ dest: IMPORTS_DIR, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ─── Basic Auth ─────────────────────────────────────────────────────────────
 
@@ -93,19 +99,28 @@ app.get('/wikis/add', (req, res) => {
 });
 
 // Add wiki — submit
-app.post('/wikis/add', (req, res) => {
+app.post('/wikis/add', upload.single('import_file'), (req, res) => {
   try {
     const name = (req.body.name || '').trim().toLowerCase();
     const siteConfig = parseFormToSiteConfig(req.body);
     const result = addSite(SITES_PATH, name, siteConfig);
 
     if (!result.ok) {
+      // Clean up uploaded file on validation failure
+      if (req.file) fs.unlinkSync(req.file.path);
       const config = loadConfig(SITES_PATH);
       return res.send(renderAddForm(config.defaults, result.error, { name, ...siteConfig }));
     }
 
-    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" added.`)}&type=success`);
+    // Rename uploaded file to <name>.html so the wiki container can find it
+    if (req.file) {
+      const dest = path.join(IMPORTS_DIR, `${name}.html`);
+      fs.renameSync(req.file.path, dest);
+    }
+
+    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" added.${req.file ? ' Tiddlers will be imported on first start.' : ''}`)}&type=success`);
   } catch (err) {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch (_) {}
     res.status(500).send(`Error: ${err.message}`);
   }
 });
@@ -147,7 +162,7 @@ app.post('/wikis/:name/edit', (req, res) => {
 });
 
 // Remove wiki — confirm or execute
-app.post('/wikis/:name/remove', (req, res) => {
+app.post('/wikis/:name/remove', async (req, res) => {
   try {
     const name = req.params.name;
     const config = loadConfig(SITES_PATH);
@@ -168,7 +183,19 @@ app.post('/wikis/:name/remove', (req, res) => {
       return res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(result.error)}&type=error`);
     }
 
-    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" removed.`)}&type=success`);
+    // Stop and remove the container, then optionally delete the volume
+    const projectName = HOST_PROJECT_DIR.replace(/[\\/]+$/, '').split(/[\\/]/).pop().toLowerCase();
+    await stopAndRemoveContainer(projectName, `wiki-${name}`);
+
+    if (req.body.delete_volume === 'yes') {
+      const volResult = await deleteVolume(projectName, name);
+      if (!volResult.success) {
+        return res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" removed, but volume deletion failed: ${volResult.stderr}`)}&type=error`);
+      }
+      return res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" and its data permanently deleted.`)}&type=success`);
+    }
+
+    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" removed. Data volume preserved.`)}&type=success`);
   } catch (err) {
     res.status(500).send(`Error: ${err.message}`);
   }

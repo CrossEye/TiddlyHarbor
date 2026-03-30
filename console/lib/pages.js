@@ -85,6 +85,9 @@ const PAGE_STYLES = `
   .form-row > * { flex:1; }
   .form-actions { display:flex; gap:0.75rem; margin-top:1rem; }
 
+  fieldset { border:1px solid #dce4ec; border-radius:6px; padding:0.75rem 1rem 0.5rem; margin-top:1rem; }
+  fieldset legend { font-weight:700; font-size:0.9rem; color:#1a5276; padding:0 0.4rem; }
+
   details { margin-top:1rem; }
   details summary { cursor:pointer; font-weight:700; color:#1a5276; font-size:0.9rem; }
   details[open] summary { margin-bottom:0.75rem; }
@@ -197,52 +200,89 @@ function siteForm({ action, name, site, defaults, error, isEdit }) {
     ? (v.oauth_providers === 'none' ? 'none' : (Array.isArray(v.oauth_providers) ? v.oauth_providers.join(', ') : String(v.oauth_providers)))
     : '';
 
+  // Split stored repo URL (https://token@github.com/org/repo.git) into parts for the form
+  let repoUrl = '';
+  let repoToken = '';
+  if (v.repo) {
+    const m = v.repo.match(/^(https?:\/\/)([^@]+)@(.+)$/);
+    if (m) {
+      repoUrl = m[1] + m[3];   // https://github.com/org/repo.git
+      repoToken = m[2];         // the token
+    } else {
+      repoUrl = v.repo;         // no embedded token
+    }
+  }
+
   return `
     ${error ? `<div class="alert alert-error">${escapeHtml(error)}</div>` : ''}
     <div class="th-card">
-      <form method="POST" action="${escapeHtml(action)}">
+      <form method="POST" action="${escapeHtml(action)}"${!isEdit ? ' enctype="multipart/form-data"' : ''}>
       ${nameField}
-        <div class="form-row">
-          <div>
-            <label>Path <span class="hint">URL path prefix</span></label>
-            <input type="text" name="path" value="${escapeHtml(v.path || '')}" placeholder="/${escapeHtml(v._name || name || 'wiki-name')}">
-          </div>
-          <div>
-            <label>Domain <span class="hint">comma-separated if multiple</span></label>
-            <input type="text" name="domain" value="${escapeHtml(formatDomain(v) === '—' ? '' : formatDomain(v))}" placeholder="wiki.example.com">
-          </div>
-        </div>
-        <div>
-          <label>Git Remote URL <span class="hint">optional</span></label>
-          <input type="text" name="repo" value="${escapeHtml(v.repo || '')}" placeholder="https://token@github.com/org/repo.git">
-        </div>
-        <div class="form-row">
-          <div>
-            <label>Admin Username <span class="hint">used on first start only</span></label>
-            <input type="text" name="basic_auth_user" value="${escapeHtml(v.basic_auth_user || '')}" placeholder="admin" autocomplete="off">
-          </div>
-          <div>
-            <label>Admin Password <span class="hint">${isEdit ? 'only applies on first start' : 'initial password (first start only)'}</span></label>
-            <input type="text" name="basic_auth_pass" value="${escapeHtml(v.basic_auth_pass || '')}" placeholder="${isEdit ? '(unchanged)' : 'change-me-' + escapeHtml(name || 'wiki')}" autocomplete="off">
-          </div>
-        </div>
 
-        <details>
-          <summary>Advanced Settings</summary>
+        <fieldset>
+          <legend>Basics</legend>
+          <div class="form-row">
+            <div>
+              <label>Path <span class="hint">URL path prefix</span></label>
+              <input type="text" name="path" value="${escapeHtml(v.path || '')}" placeholder="/${escapeHtml(v._name || name || 'wiki-name')}">
+            </div>
+            <div>
+              <label>Domain <span class="hint">comma-separated if multiple</span></label>
+              <input type="text" name="domain" value="${escapeHtml(formatDomain(v) === '—' ? '' : formatDomain(v))}" placeholder="wiki.example.com">
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Admin Username <span class="hint">used on first start only</span></label>
+              <input type="text" name="basic_auth_user" value="${escapeHtml(v.basic_auth_user || '')}" placeholder="admin" autocomplete="off">
+            </div>
+            <div>
+              <label>Admin Password <span class="hint">${isEdit ? 'only applies on first start' : 'initial password (first start only)'}</span></label>
+              <input type="text" name="basic_auth_pass" value="${escapeHtml(v.basic_auth_pass || '')}" placeholder="${isEdit ? '(unchanged)' : 'change-me-' + escapeHtml(name || 'wiki')}" autocomplete="off">
+            </div>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="public_read" name="public_read" ${(v.public_read !== undefined ? v.public_read : d.public_read !== false) ? 'checked' : ''}>
+            <label for="public_read">Public read access</label>
+          </div>
+${!isEdit ? `
+          <div>
+            <label>Import from single-file wiki <span class="hint">optional .html file — tiddlers will be loaded into the new wiki</span></label>
+            <input type="file" name="import_file" accept=".html,.htm">
+          </div>
+` : ''}
+        </fieldset>
+
+        <fieldset>
+          <legend>Git</legend>
+          <div>
+            <label>Repository URL <span class="hint">optional</span></label>
+            <input type="text" name="git_repo_url" value="${escapeHtml(repoUrl)}" placeholder="https://github.com/org/repo.git">
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Access Token <span class="hint">for push access</span></label>
+              <input type="password" name="git_token" value="${escapeHtml(repoToken)}" placeholder="github_pat_..." autocomplete="off">
+            </div>
+            <div>
+              <label>Branch <span class="hint">default: main</span></label>
+              <input type="text" name="git_branch" value="${escapeHtml(v.git_branch || '')}" placeholder="main">
+            </div>
+          </div>
           <div class="form-row">
             <div class="checkbox-row">
-              <input type="checkbox" id="public_read" name="public_read" ${(v.public_read !== undefined ? v.public_read : d.public_read !== false) ? 'checked' : ''}>
-              <label for="public_read">Public read access</label>
-            </div>
-            <div class="checkbox-row">
               <input type="checkbox" id="git_autosave_enabled" name="git_autosave_enabled" ${(v.git_autosave_enabled !== undefined ? v.git_autosave_enabled : d.git_autosave_enabled !== false) ? 'checked' : ''}>
-              <label for="git_autosave_enabled">Git auto-save</label>
+              <label for="git_autosave_enabled">Auto-save commits</label>
             </div>
             <div class="checkbox-row">
               <input type="checkbox" id="git_autopush" name="git_autopush" ${(v.git_autopush !== undefined ? v.git_autopush : d.git_autopush === true) ? 'checked' : ''}>
               <label for="git_autopush">Auto-push to remote</label>
             </div>
           </div>
+        </fieldset>
+
+        <details>
+          <summary>Advanced Settings</summary>
           <div class="form-row">
             <div>
               <label>Quiescence (min) <span class="hint">default: ${d.quiescence_minutes || 5}</span></label>
@@ -294,16 +334,21 @@ function renderRemoveConfirm(name, site, siteCount) {
       <h2 style="margin-top:0; color:#c0392b;">Remove "${escapeHtml(name)}"?</h2>
       <p><strong>Path:</strong> ${escapeHtml(site.path || `/${name}`)}</p>
       <p><strong>Domain:</strong> ${escapeHtml(formatDomain(site))}</p>
-      <div class="alert alert-warning">
-        This removes the wiki from the configuration. The Docker volume containing wiki data is <strong>not</strong> deleted.
-        Run <code>docker volume rm</code> manually to delete data.
-      </div>
       <div class="form-actions">
         <form method="POST" action="${BASE}/wikis/${encodeURIComponent(name)}/remove">
           <input type="hidden" name="confirm" value="yes">
-          <button type="submit" class="btn btn-danger">Yes, Remove</button>
+          <button type="submit" class="btn btn-danger">Remove Config Only</button>
+        </form>
+        <form method="POST" action="${BASE}/wikis/${encodeURIComponent(name)}/remove">
+          <input type="hidden" name="confirm" value="yes">
+          <input type="hidden" name="delete_volume" value="yes">
+          <button type="submit" class="btn btn-danger" style="background:#7b241c;">Remove + Delete All Data</button>
         </form>
         <a href="${BASE}/" class="btn btn-link">Cancel</a>
+      </div>
+      <div class="alert alert-warning" style="margin-top:1rem;">
+        <strong>Remove Config Only</strong> removes the wiki from the configuration but keeps the Docker volume. You can re-add the wiki later and its data will still be there.<br><br>
+        <strong>Remove + Delete All Data</strong> permanently destroys the wiki volume and all its tiddlers. <strong>This cannot be undone.</strong>
       </div>
     </div>`;
   return pageShell(`Remove ${name} — TiddlyHarbor Console`, body);
