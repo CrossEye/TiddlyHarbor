@@ -39,9 +39,13 @@ function parseFormToSiteConfig(body) {
   }
 
   // Combine repo URL + token into a single authenticated URL for git
-  const repoUrl = (body.git_repo_url || '').trim();
+  let repoUrl = (body.git_repo_url || '').trim().replace(/\/+$/, '');
   const repoToken = (body.git_token || '').trim();
   if (repoUrl) {
+    // Ensure .git suffix for common hosts
+    if (!repoUrl.endsWith('.git') && /github\.com|gitlab\.com|bitbucket\.org/.test(repoUrl)) {
+      repoUrl += '.git';
+    }
     if (repoToken) {
       // Insert token: https://github.com/... → https://TOKEN@github.com/...
       site.repo = repoUrl.replace(/^(https?:\/\/)/, `$1${repoToken}@`);

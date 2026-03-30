@@ -211,6 +211,8 @@ function siteForm({ action, name, site, defaults, error, isEdit }) {
     } else {
       repoUrl = v.repo;         // no embedded token
     }
+    // Show clean URL without .git suffix
+    repoUrl = repoUrl.replace(/\.git$/, '');
   }
 
   return `
@@ -262,7 +264,7 @@ ${!isEdit ? `
           <div class="form-row">
             <div>
               <label>Access Token <span class="hint">for push access</span></label>
-              <input type="password" name="git_token" value="${escapeHtml(repoToken)}" placeholder="github_pat_..." autocomplete="off">
+              <input type="text" name="git_token" value="${escapeHtml(repoToken)}" placeholder="github_pat_..." autocomplete="off">
             </div>
             <div>
               <label>Branch <span class="hint">default: main</span></label>
