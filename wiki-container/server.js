@@ -5,7 +5,7 @@ const express = require('express');
 const dotenv = require('dotenv');
 const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
 const { renderAdminPage, renderWriterLoginPage } = require('./lib/auth-pages');
-const { startTiddlyWiki } = require('./lib/tw-process');
+const { ensureWikiInitialized, ensurePathPrefixConfig, startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
 const { GitSync } = require('./lib/git-sync');
@@ -25,6 +25,10 @@ const twPort = Number(process.env.TW_INTERNAL_PORT || 8081);
 const wikiPath = process.env.WIKI_PATH || path.join(__dirname, 'wiki');
 const wikiName = process.env.WIKI_NAME || 'main';
 const sitePrefix = `/${wikiName}`;
+
+// Initialize wiki folder before anything writes into it
+ensureWikiInitialized(wikiPath);
+ensurePathPrefixConfig(wikiPath, wikiName);
 
 const userStore = new UserStore({
   dbPath: process.env.AUTH_DB_PATH || path.join(wikiPath, '.tiddlyharbor', 'auth.sqlite3'),

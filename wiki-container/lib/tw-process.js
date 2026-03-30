@@ -215,5 +215,7 @@ function startTiddlyWiki(wikiPath, port, wikiName) {
 }
 
 module.exports = {
+  ensureWikiInitialized,
+  ensurePathPrefixConfig,
   startTiddlyWiki
 };
