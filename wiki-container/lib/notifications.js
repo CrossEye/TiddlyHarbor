@@ -80,4 +80,75 @@ async function notifyAdminsOfPendingUser({ user, wikiName, sitePrefix, adminEmai
   }
 }
 
-module.exports = { notifyAdminsOfPendingUser };
+function isSmtpConfigured() {
+  return getSmtpConfig() !== null;
+}
+
+async function sendInviteEmail({ to, wikiName, inviterUsername, setPasswordUrl }) {
+  const transport = getTransporter();
+  if (!transport) {
+    console.log('SMTP not configured — skipping invite email');
+    return false;
+  }
+
+  try {
+    await transport.transporter.sendMail({
+      from: transport.from,
+      to,
+      subject: `You've been invited to ${wikiName}`,
+      text: [
+        `${inviterUsername} has invited you to collaborate on "${wikiName}".`,
+        '',
+        'Set your password to get started:',
+        setPasswordUrl,
+        '',
+        'This link expires in 72 hours.',
+        '',
+        '— TiddlyHarbor'
+      ].join('\n')
+    });
+    console.log(`Invite email sent to ${to}`);
+    return true;
+  } catch (err) {
+    console.error('Failed to send invite email:', err.message);
+    return false;
+  }
+}
+
+async function sendPasswordResetEmail({ to, wikiName, resetUrl }) {
+  const transport = getTransporter();
+  if (!transport) {
+    console.log('SMTP not configured — skipping reset email');
+    return false;
+  }
+
+  try {
+    await transport.transporter.sendMail({
+      from: transport.from,
+      to,
+      subject: `Password reset for ${wikiName}`,
+      text: [
+        'Someone requested a password reset for your account.',
+        '',
+        'Reset your password:',
+        resetUrl,
+        '',
+        'This link expires in 1 hour. If you did not request this, you can ignore this email.',
+        '',
+        '— TiddlyHarbor'
+      ].join('\n')
+    });
+    console.log(`Password reset email sent to ${to}`);
+    return true;
+  } catch (err) {
+    console.error('Failed to send reset email:', err.message);
+    return false;
+  }
+}
+
+module.exports = {
+  isSmtpConfigured,
+  notifyAdminsOfPendingUser,
+  sendInviteEmail,
+  sendPasswordResetEmail
+};

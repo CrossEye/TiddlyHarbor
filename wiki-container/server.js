@@ -4,7 +4,7 @@ const http = require('http');
 const express = require('express');
 const dotenv = require('dotenv');
 const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
-const { renderAdminPage, renderWriterLoginPage } = require('./lib/auth-pages');
+const { renderAdminPage, renderForgotPasswordPage, renderSetPasswordPage, renderTokenErrorPage, renderWriterLoginPage } = require('./lib/auth-pages');
 const { ensureWikiInitialized, ensurePathPrefixConfig, startTiddlyWiki } = require('./lib/tw-process');
 const { requireBasicWriteAuth } = require('./lib/write-guard');
 const { buildExpiredSessionCookieHeader, buildSessionCookieHeader, getWriterSession, hasValidWriterSession } = require('./lib/writer-session');
@@ -13,7 +13,7 @@ const { hasAdminAccess, hasWriteAccess, UserStore } = require('./lib/user-store'
 const { getEnabledProviders } = require('./lib/oauth-config');
 const { initializeStrategies, passport } = require('./lib/oauth-strategies');
 const { buildExpiredOAuthStateCookie, buildOAuthStateCookie, readOAuthStateCookie } = require('./lib/oauth-state');
-const { notifyAdminsOfPendingUser } = require('./lib/notifications');
+const { isSmtpConfigured, notifyAdminsOfPendingUser, sendInviteEmail, sendPasswordResetEmail } = require('./lib/notifications');
 const tiddlyWikiVersion = require('tiddlywiki/package.json').version;
 
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -370,12 +370,16 @@ app.get([`${sitePrefix}/login`, '/login'], (req, res) => {
     pending: 'Your account is pending admin approval.'
   };
 
+  const successMessages = { 'password-set': 'Password set successfully. You can now sign in.' };
+
   return res.status(200).send(renderWriterLoginPage({
     wikiName,
     sitePrefix,
     nextPath,
     enabledProviders: enabledOAuthProviders,
-    errorMessage: errorMessages[req.query.error] || ''
+    errorMessage: errorMessages[req.query.error] || '',
+    successMessage: successMessages[req.query.msg] || '',
+    smtpConfigured: isSmtpConfigured()
   }));
 });
 
@@ -390,7 +394,8 @@ app.post([`${sitePrefix}/login`, '/login'], (req, res) => {
       wikiName,
       sitePrefix,
       nextPath,
-      errorMessage: 'Incorrect username or password.'
+      errorMessage: 'Incorrect username or password.',
+      smtpConfigured: isSmtpConfigured()
     }));
   }
 
@@ -418,6 +423,112 @@ app.post([`${sitePrefix}/logout`, '/logout'], (req, res) => {
 
 app.get([`${sitePrefix}/logout`, '/logout'], (req, res) => {
   return completeWriterLogout(req, res, req.query.next || `${sitePrefix}/`);
+});
+
+// ── Set-password (invite + reset) ────────────────────────────────────────
+
+app.get([`${sitePrefix}/set-password`, '/set-password'], (req, res) => {
+  const rawToken = req.query.token || '';
+  const info = userStore.validateToken(rawToken);
+  if (!info) {
+    return res.status(400).send(renderTokenErrorPage({
+      wikiName, sitePrefix,
+      message: 'This link has expired or has already been used.'
+    }));
+  }
+
+  return res.send(renderSetPasswordPage({
+    wikiName, sitePrefix,
+    username: info.username,
+    token: rawToken,
+    tokenType: info.tokenType,
+    errorMessage: ''
+  }));
+});
+
+app.post([`${sitePrefix}/set-password`, '/set-password'], (req, res) => {
+  const rawToken = req.body?.token || '';
+  const password = req.body?.password || '';
+  const confirm = req.body?.password_confirm || '';
+
+  // Re-validate before consuming
+  const info = userStore.validateToken(rawToken);
+  if (!info) {
+    return res.status(400).send(renderTokenErrorPage({
+      wikiName, sitePrefix,
+      message: 'This link has expired or has already been used.'
+    }));
+  }
+
+  if (password !== confirm) {
+    return res.send(renderSetPasswordPage({
+      wikiName, sitePrefix,
+      username: info.username,
+      token: rawToken,
+      tokenType: info.tokenType,
+      errorMessage: 'Passwords do not match.'
+    }));
+  }
+
+  if (password.length < 8) {
+    return res.send(renderSetPasswordPage({
+      wikiName, sitePrefix,
+      username: info.username,
+      token: rawToken,
+      tokenType: info.tokenType,
+      errorMessage: 'Password must be at least 8 characters.'
+    }));
+  }
+
+  // Consume the token and set the password
+  const consumed = userStore.consumeToken(rawToken);
+  if (!consumed) {
+    return res.status(400).send(renderTokenErrorPage({
+      wikiName, sitePrefix,
+      message: 'This link has expired or has already been used.'
+    }));
+  }
+
+  try {
+    userStore.setPassword(consumed.username, password);
+  } catch (err) {
+    return res.status(400).send(renderTokenErrorPage({
+      wikiName, sitePrefix,
+      message: err.message
+    }));
+  }
+
+  return res.redirect(`${sitePrefix}/login?msg=password-set`);
+});
+
+// ── Forgot password ─────────────────────────────────────────────────────
+
+app.get([`${sitePrefix}/forgot-password`, '/forgot-password'], (req, res) => {
+  return res.send(renderForgotPasswordPage({ wikiName, sitePrefix }));
+});
+
+app.post([`${sitePrefix}/forgot-password`, '/forgot-password'], async (req, res) => {
+  const email = (req.body?.email || '').trim();
+
+  // Always show the same message regardless of whether the email exists (no user enumeration)
+  const successMsg = 'If an account with that email exists, we\'ve sent a password reset link.';
+
+  if (email && isSmtpConfigured()) {
+    const user = userStore.getUserByEmail(email);
+    if (user && user.isActive) {
+      const token = userStore.createToken(user.username, 'reset');
+      const externalBase = (process.env.OAUTH_EXTERNAL_BASE_URL || '').replace(/\/+$/, '');
+      const resetUrl = `${externalBase}${sitePrefix}/set-password?token=${token}`;
+      sendPasswordResetEmail({ to: email, wikiName, resetUrl }).catch((err) => {
+        console.error('Reset email error:', err.message);
+      });
+    }
+  }
+
+  return res.send(renderForgotPasswordPage({
+    wikiName, sitePrefix,
+    successMessage: successMsg
+  }));
 });
 
 // ── OAuth routes ──────────────────────────────────────────────────────────
@@ -534,30 +645,54 @@ app.get([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, (req, res) =
     currentUser: req.writerSession,
     users,
     message: req.query.msg || '',
-    errorMessage: req.query.err || ''
+    errorMessage: req.query.err || '',
+    smtpConfigured: isSmtpConfigured()
   }));
 });
 
-app.post([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, (req, res) => {
+app.post([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, async (req, res) => {
   const action = String(req.body?.action || '').trim();
   const username = String(req.body?.username || '').trim();
 
   try {
     if (action === 'create-user') {
+      const email = (req.body?.email || '').trim();
+      const password = req.body?.password || '';
+      const isInvite = !password && email;
+
       const user = userStore.createUser({
         username,
-        password: req.body?.password,
+        password: password || undefined,
+        email: email || undefined,
         role: req.body?.role
       });
+
+      let msg = `Created user ${user.username}`;
+
+      if (isInvite) {
+        const token = userStore.createToken(user.username, 'invite');
+        const externalBase = (process.env.OAUTH_EXTERNAL_BASE_URL || '').replace(/\/+$/, '');
+        const setPasswordUrl = `${externalBase}${sitePrefix}/set-password?token=${token}`;
+        const sent = await sendInviteEmail({
+          to: email,
+          wikiName,
+          inviterUsername: req.writerSession.username,
+          setPasswordUrl
+        });
+        msg = sent
+          ? `Invited ${user.username} — email sent to ${email}`
+          : `Created ${user.username} (invite email failed — SMTP issue)`;
+      }
+
       auditAdminAction({
         req,
         actor: req.writerSession.username,
         action: 'create-user',
         targetUsername: user.username,
         outcome: 'success',
-        detail: `role:${user.role}`
+        detail: isInvite ? `role:${user.role},invited:${email}` : `role:${user.role}`
       });
-      return redirectAdminPage(res, { msg: `Created user ${user.username}` });
+      return redirectAdminPage(res, { msg });
     }
 
     if (action === 'set-role') {
@@ -637,6 +772,20 @@ app.post([`${sitePrefix}/admin`, '/admin'], requireAdminPageSession, (req, res) 
       return redirectAdminPage(res, { msg: `Updated password for ${user.username}` });
     }
 
+    if (action === 'set-email') {
+      const email = (req.body?.email || '').trim();
+      const user = userStore.setEmail(username, email);
+      auditAdminAction({
+        req,
+        actor: req.writerSession.username,
+        action: 'set-email',
+        targetUsername: user.username,
+        outcome: 'success',
+        detail: email ? `email:${email}` : 'email-cleared'
+      });
+      return redirectAdminPage(res, { msg: `Updated email for ${user.username}` });
+    }
+
     if (action === 'delete-user') {
       if (isSelfUser(req, username)) {
         auditAdminAction({
@@ -697,8 +846,8 @@ app.get([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, 
 
 app.post([`${sitePrefix}/auth/users`, '/auth/users'], requireAdminSession, (req, res) => {
   try {
-    const { username, password, role } = req.body || {};
-    const user = userStore.createUser({ username, password, role });
+    const { username, password, email, role } = req.body || {};
+    const user = userStore.createUser({ username, password: password || undefined, email: email || undefined, role });
     auditAdminAction({
       req,
       actor: req.writerSession.username,
@@ -1025,6 +1174,7 @@ if (process.env.PUBLIC_READ === 'false') {
   app.use((req, res, next) => {
     const ep = getEffectivePath(req);
     if (ep.startsWith('/login') || ep.startsWith('/auth/') ||
+        ep.startsWith('/set-password') || ep.startsWith('/forgot-password') ||
         ep === '/status' || ep === '/health') {
       return next();
     }
@@ -1077,6 +1227,11 @@ app.use(
 const server = app.listen(publicPort, () => {
   console.log(`TiddlyHarbor wiki listening on ${publicPort}, proxying to TW on ${twPort}`);
 });
+
+// Purge expired tokens once per hour
+setInterval(() => {
+  try { userStore.purgeExpiredTokens(); } catch (_) {}
+}, 60 * 60 * 1000);
 
 function shutdown() {
   server.close(() => {

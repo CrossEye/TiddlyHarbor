@@ -54,14 +54,14 @@ const PAGE_STYLES = `
   /* ── Forms ── */
   label { display:block; margin-bottom:0.25rem; font-size:0.8rem;
           font-weight:700; color:#1a3a5c; text-transform:uppercase; letter-spacing:0.04em; }
-  input[type=text], input[type=password] {
+  input[type=text], input[type=password], input[type=email] {
     width:100%; padding:0.6rem 0.75rem; border:1px solid #94a3b8;
     border-radius:0.4rem; font-size:1rem; margin-bottom:1rem;
     transition:border-color 0.15s, box-shadow 0.15s; }
-  input[type=text]:focus, input[type=password]:focus {
+  input[type=text]:focus, input[type=password]:focus, input[type=email]:focus {
     outline:none; border-color:#2e86ab; box-shadow:0 0 0 3px rgba(46,134,171,0.18); }
-  select { padding:0.45rem 0.6rem; border:1px solid #94a3b8; border-radius:0.4rem;
-           font-size:0.85rem; background:#fff; color:#0f2b44; }
+  select { padding:0.6rem 0.75rem; border:1px solid #94a3b8; border-radius:0.4rem;
+           font-size:1rem; background:#fff; color:#0f2b44; }
   select:disabled { opacity:0.45; cursor:not-allowed; }
 
   /* ── Buttons ── */
@@ -161,9 +161,12 @@ function renderOAuthButtons(providers, sitePrefix, nextPath) {
     ${buttons}`;
 }
 
-function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath, enabledProviders }) {
+function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, successMessage, nextPath, enabledProviders, smtpConfigured }) {
   const safeError = errorMessage
     ? `<div class="alert alert-error">${escapeHtml(errorMessage)}</div>`
+    : '';
+  const safeSuccess = successMessage
+    ? `<div class="alert alert-success">${escapeHtml(successMessage)}</div>`
     : '';
   const safeNextPath = nextPath ? escapeHtml(nextPath) : '';
   const hiddenNext = safeNextPath ? `<input name="next" type="hidden" value="${safeNextPath}">` : '';
@@ -179,13 +182,14 @@ function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath, e
           Sign in — <span style="color:#2e86ab;">${escapeHtml(wikiName)}</span>
         </h2>
         <p style="color:#5d6d7e;margin-top:0;font-size:0.9rem;">Authenticate for write access. Reading is public.</p>
-        ${safeError}
+        ${safeSuccess}${safeError}
         <form method="post" action="${sitePrefix}/login">
           ${hiddenNext}
           <label for="username">Username</label>
           <input id="username" name="username" type="text" autocomplete="username">
           <label for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="current-password">
+          ${smtpConfigured ? `<p style="margin:-0.5rem 0 1rem;text-align:right;"><a href="${sitePrefix}/forgot-password" style="color:#2e86ab;font-size:0.85rem;">Forgot password?</a></p>` : ''}
           <button type="submit" class="btn btn-primary" style="width:100%;padding:0.75rem;font-size:1rem;">Sign In</button>
         </form>
         ${oauthButtons}
@@ -198,7 +202,7 @@ function renderWriterLoginPage({ wikiName, sitePrefix, errorMessage, nextPath, e
   return pageShell(`TiddlyHarbor — ${wikiName} Sign In`, body);
 }
 
-function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, errorMessage }) {
+function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, errorMessage, smtpConfigured }) {
   const safeMessage = message
     ? `<div class="alert alert-success">${escapeHtml(message)}</div>`
     : '';
@@ -223,15 +227,21 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
     const providerInfo = user.oauthProvider
       ? `<span style="color:#5d6d7e;font-size:0.75rem;display:block;">${escapeHtml(user.oauthProvider)}</span>`
       : '';
-    const emailInfo = user.email
-      ? `<span style="color:#5d6d7e;font-size:0.75rem;display:block;">${escapeHtml(user.email)}</span>`
-      : '';
 
     return `
       <tr>
         <td>
           <strong>${escapeHtml(user.displayName || user.username)}</strong>${selfNote}
-          ${providerInfo}${emailInfo}
+          ${providerInfo}
+        </td>
+        <td>
+          <form method="post" action="${sitePrefix}/admin" class="inline-form">
+            <input type="hidden" name="action" value="set-email">
+            <input type="hidden" name="username" value="${escapeHtml(user.username)}">
+            <input type="email" name="email" value="${escapeHtml(user.email || '')}" placeholder="—"
+                   style="width:180px;margin-bottom:0;padding:0.3rem 0.5rem;font-size:0.8rem;">
+            <button type="submit" class="btn btn-sm btn-action">Set</button>
+          </form>
         </td>
         <td>
           <form method="post" action="${sitePrefix}/admin" class="inline-form">
@@ -337,9 +347,14 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
                    style="width:160px;margin-bottom:0;">
           </div>
           <div>
-            <label>Password</label>
-            <input type="password" name="password" placeholder="password" required
-                   style="width:160px;margin-bottom:0;">
+            <label>Email</label>
+            <input type="email" name="email" placeholder="user@example.com"
+                   style="width:200px;margin-bottom:0;">
+          </div>
+          <div>
+            <label>Password <span style="font-weight:400;text-transform:none;font-size:0.75rem;color:#5d6d7e;">optional</span></label>
+            <input type="password" name="password" placeholder="${smtpConfigured ? 'blank = send invite' : 'password'}"
+                   style="width:160px;margin-bottom:0;"${smtpConfigured ? '' : ' required'}>
           </div>
           <div>
             <label>Role</label>
@@ -351,6 +366,7 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
           </div>
           <button type="submit" class="btn btn-primary">Create User</button>
         </form>
+        ${smtpConfigured ? '<p style="margin:0.5rem 0 0;font-size:0.8rem;color:#5d6d7e;">Leave password blank to send an invite email instead.</p>' : ''}
       </div>
       <div class="th-section">
         <h2>Users</h2>
@@ -359,6 +375,7 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
             <thead>
               <tr>
                 <th>Username</th>
+                <th>Email</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th>Password</th>
@@ -374,7 +391,107 @@ function renderAdminPage({ wikiName, sitePrefix, currentUser, users, message, er
   return pageShell(`TiddlyHarbor Admin — ${wikiName}`, body);
 }
 
+function renderSetPasswordPage({ wikiName, sitePrefix, username, token, tokenType, errorMessage }) {
+  const safeError = errorMessage
+    ? `<div class="alert alert-error">${escapeHtml(errorMessage)}</div>`
+    : '';
+
+  const heading = tokenType === 'invite'
+    ? `Welcome to <span style="color:#2e86ab;">${escapeHtml(wikiName)}</span>`
+    : `Reset password — <span style="color:#2e86ab;">${escapeHtml(wikiName)}</span>`;
+  const subtitle = tokenType === 'invite'
+    ? 'Set your password to get started.'
+    : 'Enter your new password.';
+
+  const body = `
+    <header class="th-header">
+      <div class="th-wordmark">${WORDMARK_SVG}</div>
+    </header>
+    <div class="th-main-narrow">
+      <div class="th-card" style="margin-top:2rem;">
+        <h2 style="margin-top:0;color:#0f2b44;border-bottom:2px solid #2e86ab;padding-bottom:0.4rem;">
+          ${heading}
+        </h2>
+        <p style="color:#5d6d7e;margin-top:0;font-size:0.9rem;">${subtitle}</p>
+        ${safeError}
+        <form method="post" action="${sitePrefix}/set-password">
+          <input type="hidden" name="token" value="${escapeHtml(token)}">
+          <label>Username</label>
+          <div style="padding:0.6rem 0.75rem;background:#f0f5fa;border:1px solid #dce6f0;border-radius:0.4rem;margin-bottom:1rem;font-size:1rem;color:#0f2b44;font-weight:600;">
+            ${escapeHtml(username)}
+          </div>
+          <label for="password">New Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8">
+          <label for="password_confirm">Confirm Password</label>
+          <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required minlength="8">
+          <button type="submit" class="btn btn-primary" style="width:100%;padding:0.75rem;font-size:1rem;">Set Password</button>
+        </form>
+        <p style="margin-top:1.25rem;font-size:0.875rem;">
+          <a href="${sitePrefix}/login" style="color:#2e86ab;">← Back to sign in</a>
+        </p>
+      </div>
+    </div>`;
+
+  return pageShell(`Set Password — ${wikiName}`, body);
+}
+
+function renderForgotPasswordPage({ wikiName, sitePrefix, successMessage, errorMessage }) {
+  const safeSuccess = successMessage
+    ? `<div class="alert alert-success">${escapeHtml(successMessage)}</div>`
+    : '';
+  const safeError = errorMessage
+    ? `<div class="alert alert-error">${escapeHtml(errorMessage)}</div>`
+    : '';
+
+  const body = `
+    <header class="th-header">
+      <div class="th-wordmark">${WORDMARK_SVG}</div>
+    </header>
+    <div class="th-main-narrow">
+      <div class="th-card" style="margin-top:2rem;">
+        <h2 style="margin-top:0;color:#0f2b44;border-bottom:2px solid #2e86ab;padding-bottom:0.4rem;">
+          Forgot password — <span style="color:#2e86ab;">${escapeHtml(wikiName)}</span>
+        </h2>
+        <p style="color:#5d6d7e;margin-top:0;font-size:0.9rem;">
+          Enter your email and we'll send a link to reset your password.
+        </p>
+        ${safeSuccess}${safeError}
+        ${!successMessage ? `
+        <form method="post" action="${sitePrefix}/forgot-password">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+          <button type="submit" class="btn btn-primary" style="width:100%;padding:0.75rem;font-size:1rem;">Send Reset Link</button>
+        </form>` : ''}
+        <p style="margin-top:1.25rem;font-size:0.875rem;">
+          <a href="${sitePrefix}/login" style="color:#2e86ab;">← Back to sign in</a>
+        </p>
+      </div>
+    </div>`;
+
+  return pageShell(`Forgot Password — ${wikiName}`, body);
+}
+
+function renderTokenErrorPage({ wikiName, sitePrefix, message }) {
+  const body = `
+    <header class="th-header">
+      <div class="th-wordmark">${WORDMARK_SVG}</div>
+    </header>
+    <div class="th-main-narrow">
+      <div class="th-card" style="margin-top:2rem;">
+        <div class="alert alert-error">${escapeHtml(message)}</div>
+        <p style="font-size:0.875rem;">
+          <a href="${sitePrefix}/login" style="color:#2e86ab;">← Back to sign in</a>
+        </p>
+      </div>
+    </div>`;
+
+  return pageShell(`Link Expired — ${wikiName}`, body);
+}
+
 module.exports = {
   renderAdminPage,
+  renderForgotPasswordPage,
+  renderSetPasswordPage,
+  renderTokenErrorPage,
   renderWriterLoginPage,
 };
