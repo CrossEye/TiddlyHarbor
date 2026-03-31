@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../wiki-container/logos/wordmark-dark-bg.svg" alt="TiddlyHarbor" width="480">
+</p>
+
 # Production Deployment Guide
 
 This guide covers deploying TiddlyHarbor to a VPS with real domains, HTTPS,
@@ -91,6 +95,11 @@ WRITER_SESSION_SECRET=generate-a-random-string-here
 GIT_AUTHOR_NAME=TiddlyHarbor Bot
 GIT_AUTHOR_EMAIL=bot@example.com
 
+# Management console credentials
+CONSOLE_USER=admin
+CONSOLE_PASS=your-console-password-here
+HOST_PROJECT_DIR=/path/to/TiddlyHarbor
+
 # OAuth (see section 4 below)
 OAUTH_EXTERNAL_BASE_URL=https://wiki.example.com
 
@@ -99,7 +108,7 @@ OAUTH_EXTERNAL_BASE_URL=https://wiki.example.com
 
 ### Edit `config/sites.yml`
 
-Define your wikis:
+Define your initial wikis (you can also add wikis later through the console):
 
 ```yaml
 defaults:
@@ -114,19 +123,12 @@ sites:
     path: /main
     domain: wiki.example.com
     repo: ""
-    # oauth_providers: [github, google]
-
-  policies:
-    path: /policies
-    domain: policies.rhamschools.org
-    public_read: false
-    repo: "https://TOKEN@github.com/org/policies-wiki.git"
 ```
 
 ### Generate Docker configs
 
 ```bash
-npm run setup
+node scripts/generate-config.js
 ```
 
 This creates `docker-compose.yml` and `Caddyfile` from your `sites.yml`.
@@ -182,10 +184,11 @@ OAUTH_GOOGLE_CLIENT_SECRET=your-client-secret
 
 ### Per-Wiki Provider Selection
 
-By default, all wikis show all configured OAuth providers. To restrict:
+By default, all wikis show all configured OAuth providers. To restrict
+providers for specific wikis, set `oauth_providers` in the wiki's config
+(either through the console edit form or in `sites.yml`):
 
 ```yaml
-# In sites.yml
 sites:
   main:
     oauth_providers: [github, google]  # both providers
@@ -195,10 +198,18 @@ sites:
 
 ---
 
-## 5. Email Notifications (Optional)
+## 5. Email Setup (Optional)
 
-TiddlyHarbor can email admins when a new user registers and is awaiting
-approval. Configure SMTP in `.env`:
+TiddlyHarbor uses SMTP email for:
+
+- **User invites** — Admins can create users with just an email; the user
+  receives a link to set their password
+- **Password resets** — Users can request a forgot-password link from the
+  login page
+- **Admin notifications** — Emails when new OAuth users register and are
+  awaiting approval
+
+Configure SMTP in `.env`:
 
 ```
 SMTP_HOST=smtp.sendgrid.net
@@ -218,7 +229,8 @@ SMTP_FROM=noreply@example.com
 | Amazon SES | email-smtp.us-east-1.amazonaws.com | 587 | Very cheap at scale |
 
 If SMTP is not configured, TiddlyHarbor logs notifications to the console
-instead. No emails are sent.
+instead. Invite and password-reset features are unavailable without SMTP —
+users must be created with passwords directly.
 
 **Note:** Some VPS providers (notably Oracle Cloud) block outbound SMTP on port
 25. Port 587 (submission) is usually open.
@@ -240,59 +252,81 @@ Check logs:
 docker compose logs -f
 ```
 
+The management console is available at `https://wiki.example.com/_console/`.
+
 ---
 
 ## 7. Managing Wikis
 
-### Add a wiki
+### Using the Console
 
-```bash
-npm run manage add my-wiki --domain=my-wiki.example.com
-# or: npm run manage add my-wiki --path=/my-wiki
-docker compose up -d --build
-```
+The management console at `/_console/` is the primary way to manage wikis.
 
-### Remove a wiki
+**Adding a wiki:**
 
-```bash
-npm run manage remove my-wiki
-docker compose up -d --build
-```
+1. Click **Add Wiki** on the dashboard
+2. Fill in the wiki name, path, and optional settings (domain, git repo,
+   branch, auth credentials, OAuth providers)
+3. Optionally upload an HTML TiddlyWiki file to import its tiddlers
+4. Submit — the config is saved and applied automatically
 
-**Warning:** Removing a wiki from the config does not delete its data volume. To
-fully remove data: `docker volume rm tiddlyharbor_wiki_mywiki_data`
+**Editing a wiki:**
 
-### List wikis
+1. Click the **Edit** link next to any wiki on the dashboard
+2. Modify fields as needed
+3. Submit — changes are applied automatically
 
-```bash
-npm run manage list
-```
+**Removing a wiki:**
+
+1. Click the **Remove** link next to a wiki
+2. Confirm removal; optionally check "delete data volume" for permanent deletion
+3. The config is updated and applied automatically
+
+**Applying changes manually:**
+
+If you edit `config/sites.yml` directly, click **Apply Changes** on the
+dashboard to regenerate configs and restart containers. The button shows
+"Up to date" when the running config matches what was last applied.
+
+### Using the Per-Wiki Admin Page
+
+Each wiki has an admin page at `/<wiki>/admin` for managing that wiki's users:
+
+- **Create users** — With a password, or with just an email to send an invite
+  link (requires SMTP)
+- **Manage roles** — Assign `reader`, `writer`, or `admin`
+- **Set emails** — Inline email field per user
+- **Reset passwords** — Set a new password for any user
+- **Enable/disable accounts** — Temporarily suspend access
+- **Delete users** — Permanently remove an account
+
+The login page shows a **Forgot password?** link when SMTP is configured,
+allowing users to reset their own passwords via email.
 
 ---
 
 ## 8. Backup with Git Push
 
-Each wiki's tiddlers directory is a git repository. To push to GitHub:
+Each wiki's tiddlers directory is a git repository. To push to a remote:
 
 1. Create a GitHub repository for the wiki
 2. Generate a fine-grained personal access token with Contents write permission
-3. Update `sites.yml`:
+3. Set the repo URL in the console's edit form for the wiki (or in `sites.yml`):
 
-```yaml
-sites:
-  main:
-    repo: "https://ghp_TOKEN@github.com/your-org/main-wiki.git"
-    git_autopush: true
-```
+   ```yaml
+   sites:
+     main:
+       repo: "https://ghp_TOKEN@github.com/your-org/main-wiki.git"
+       git_autopush: true
+       git_branch: main
+   ```
 
-4. Regenerate and restart:
+4. If editing `sites.yml` directly, click **Apply Changes** in the console
 
-```bash
-npm run setup
-docker compose up -d --build
-```
+Auto-commits are pushed to the remote after each save cycle.
 
-Auto-commits are pushed to GitHub after each save.
+Wikis with a `repo` configured will clone from that remote on first start if the
+wiki directory is empty. Set `git_branch` to specify which branch to use.
 
 ---
 
@@ -301,9 +335,17 @@ Auto-commits are pushed to GitHub after each save.
 ```bash
 cd TiddlyHarbor
 git pull
-npm run setup          # regenerate configs if sites.yml format changed
 docker compose up -d --build
 ```
+
+If the `sites.yml` schema has changed, regenerate configs first:
+
+```bash
+node scripts/generate-config.js
+docker compose up -d --build
+```
+
+Or use the console's **Apply Changes** button after pulling.
 
 ---
 
@@ -330,6 +372,84 @@ docker compose up -d --build
 
 ### Wiki not accessible
 
-- Verify the site is in `sites.yml` and configs are regenerated
-- Check container is running: `docker compose ps`
+- Check the dashboard at `/_console/` — is the wiki's container running?
 - View container logs: `docker compose logs wiki-SITENAME`
+- Verify the site appears in `config/sites.yml`
+
+### Console not accessible
+
+- Ensure `CONSOLE_PASS` is set in `.env` (the console won't start without it)
+- Ensure `HOST_PROJECT_DIR` is set to the absolute path of the TiddlyHarbor
+  directory on the host
+- Check console logs: `docker compose logs console`
+
+---
+
+## Power Users
+
+### Site Management CLI
+
+As an alternative to the console, the `manage-sites.js` script provides
+command-line wiki management:
+
+```bash
+# List configured wikis
+npm run manage list
+
+# Add a wiki
+npm run manage add my-wiki --domain=my-wiki.example.com
+npm run manage add my-wiki --path=/my-wiki --repo=https://TOKEN@github.com/org/repo.git
+
+# Remove a wiki
+npm run manage remove my-wiki
+```
+
+After CLI changes, regenerate and restart:
+
+```bash
+node scripts/generate-config.js
+docker compose up -d --build
+```
+
+### User Admin CLI
+
+Run user commands inside a wiki container:
+
+```bash
+docker compose exec wiki-main node scripts/user-admin.js list
+docker compose exec wiki-main node scripts/user-admin.js create alice StrongPass123 writer
+docker compose exec wiki-main node scripts/user-admin.js set-password alice NewPass456
+docker compose exec wiki-main node scripts/user-admin.js set-role alice admin
+docker compose exec wiki-main node scripts/user-admin.js disable alice
+docker compose exec wiki-main node scripts/user-admin.js enable alice
+docker compose exec wiki-main node scripts/user-admin.js delete alice
+```
+
+### Admin REST API
+
+Authenticated `admin` sessions can manage users via HTTP:
+
+```bash
+# List users
+curl -s -b cookie.txt http://localhost/main/auth/users
+
+# Create user
+curl -s -b cookie.txt -X POST http://localhost/main/auth/users \
+  -H "Content-Type: application/json" \
+  -d '{"username":"bob","password":"StrongPass123","role":"writer"}'
+
+# Change role
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/role \
+  -H "Content-Type: application/json" -d '{"role":"admin"}'
+
+# Toggle active
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/active \
+  -H "Content-Type: application/json" -d '{"isActive":false}'
+
+# Reset password
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/password \
+  -H "Content-Type: application/json" -d '{"password":"NewPass456"}'
+
+# Delete user
+curl -s -b cookie.txt -X DELETE http://localhost/main/auth/users/bob
+```

@@ -1,159 +1,168 @@
-TiddlyHarbor
-============
+<p align="center">
+  <img src="wiki-container/logos/wordmark-dark-bg.svg" alt="TiddlyHarbor" width="480">
+</p>
 
-Phase 1.5 scaffold for a self-hosted TiddlyWiki platform with:
-- Caddy reverse proxy
-- Express wrapper in front of TiddlyWiki
-- Writer login guard for write operations
-- Write-triggered git auto-save with quiescence and max-interval timers
-- Multi-site generation from config/sites.yml
+# TiddlyHarbor
+
+A self-hosted multi-wiki platform built on [TiddlyWiki](https://tiddlywiki.com), with a management console, Caddy reverse proxy, OAuth login, git-backed autosave, and per-wiki user management.
+
+## Features
+
+- **Management Console** — Web UI for adding, editing, and removing wikis, with live container status and one-click config apply
+- **Multi-site hosting** — Run any number of TiddlyWiki instances from a single server, each with its own path or domain
+- **User management** — Per-wiki admin page for creating users, assigning roles, setting emails, and managing access
+- **Invite & password reset** — Email-based user invites and forgot-password flow (when SMTP is configured)
+- **OAuth login** — GitHub and Google sign-in, configurable per wiki
+- **Git autosave** — Write-triggered commits with quiescence and max-interval timers, optional push to remote
+- **Clone from remote** — Wikis can clone from a git repo on first start, with configurable branch
+- **Public read / writer login** — Anonymous visitors get read-only access; write operations require authentication
+- **Tiddler import** — Upload an HTML TiddlyWiki file when creating a wiki to import its tiddlers
+- **HTTPS** — Caddy handles automatic TLS certificate provisioning via Let's Encrypt
 
 ## Quick Start
 
-1. Copy environment file:
+1. Copy and edit the environment file:
 
-	 ```bash
-	 cp .env.example .env
-	 ```
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
 
-	 On Windows cmd:
+2. Generate routing and compose files:
 
-	 ```cmd
-	 copy .env.example .env
-	 ```
+   ```bash
+   node scripts/generate-config.js
+   ```
 
-2. Update credentials in .env.
+3. Start the stack:
 
-3. Generate routing and compose files from config:
+   ```bash
+   docker compose up --build
+   ```
 
-	 ```bash
-	 node scripts/generate-config.js
-	 ```
+4. Open:
+   - Wiki: http://localhost/main/
+   - Console: http://localhost/_console/
 
-	 On Windows cmd:
+## Management Console
 
-	 ```cmd
-	 setup.cmd
-	 ```
+The console is a web UI at `/_console/` for managing your TiddlyHarbor instance. It is protected by basic auth (set `CONSOLE_USER` and `CONSOLE_PASS` in `.env`).
 
-	 On Windows PowerShell (if npm script execution is restricted):
+From the console you can:
 
-	 ```powershell
-	 node scripts/generate-config.js
-	 ```
+- **View the dashboard** — See all wikis with live running/stopped status indicators
+- **Add a wiki** — Set name, path, domain, git repo, branch, auth credentials, and per-wiki options; optionally upload an HTML file to import tiddlers
+- **Edit a wiki** — Modify any configuration field for an existing wiki
+- **Remove a wiki** — Delete a wiki from the config, with optional data volume deletion
+- **Apply changes** — Regenerate `docker-compose.yml` and `Caddyfile`, then run `docker compose up` to bring new containers online
 
-4. Start the stack:
+Changes are auto-applied when you add, edit, or remove a wiki. The dashboard shows whether configuration is up to date with the running containers.
 
-	 ```bash
-	 docker compose up --build
-	 ```
+## Per-Wiki Admin
 
-5. Open:
-	 - Main wiki: http://localhost/main/
-	 - Sandbox wiki: http://localhost/sandbox/
-	 - Main health endpoint: http://localhost/main/health
+Each wiki has an admin page at `/<wiki>/admin` (accessible to users with the `admin` role) where you can:
 
-## Current Behavior
+- Create users (with password or email invite)
+- Change roles (`reader`, `writer`, `admin`)
+- Enable/disable accounts
+- Reset passwords
+- Set user emails
+- Delete users
 
-- Reads are public.
-- Anonymous visitors are reported to TiddlyWiki as read-only, so edit/create controls are hidden by the client.
-- TiddlyWiki write operations (PUT/DELETE under /recipes/*) require writer login.
-- Writer accounts are stored in a local SQLite database at `/app/wiki/.tiddlyharbor/auth.sqlite3` by default.
-- On first startup for each wiki, a bootstrap writer account is created from that wiki's `BASIC_AUTH_USER/BASIC_AUTH_PASS` values.
-- `reader` users can log in but remain read-only; `writer` and `admin` users can write.
-- Writer login is available at `/main/login` and `/sandbox/login` and sets an HTTP-only cookie for subsequent write requests.
-- Writer login supports safe return paths via `?next=/main/...` or `?next=/sandbox/...`.
-- The built-in TiddlyWiki login/logout actions also use the same cookie-backed writer session.
-- Auto-save marks a wiki dirty on successful write requests and commits on:
-	- Quiescence timer (default 5 minutes)
-	- Max interval timer (default 60 minutes)
+When SMTP is configured, creating a user with an email but no password sends an invite link. The login page also shows a "Forgot password?" link for self-service resets.
 
-## Writer Access
-
-1. Open `/main/login` or `/sandbox/login`
-2. Sign in with the matching credentials from `.env`
-3. Return to the wiki and save normally, or use the TiddlyWiki login/logout controls in the page chrome
-
-Writers can inspect login state at `/main/auth/status` or `/sandbox/auth/status`.
-Status payloads include `username` and `role` when authenticated.
-
-## User Admin CLI
-
-Run user-management commands inside the target wiki container:
-
-```cmd
-docker compose exec wiki-main node scripts/user-admin.js list
-docker compose exec wiki-main node scripts/user-admin.js create alice StrongPassword123 writer
-docker compose exec wiki-main node scripts/user-admin.js set-password alice EvenStrongerPassword456
-docker compose exec wiki-main node scripts/user-admin.js set-role alice admin
-docker compose exec wiki-main node scripts/user-admin.js disable alice
-docker compose exec wiki-main node scripts/user-admin.js enable alice
-docker compose exec wiki-main node scripts/user-admin.js delete alice
-docker compose exec wiki-main node scripts/user-admin.js --actor CrossEye set-role CrossEye writer
-```
-
-Supported roles are `reader`, `writer`, and `admin`.
-When `--actor` is set (or `ADMIN_ACTOR`/`BASIC_AUTH_USER` is present), self-demote/self-disable/self-delete operations are blocked.
-
-## Admin API
-
-Authenticated `admin` sessions can manage users via HTTP:
-
-```cmd
-curl.exe -s -b admin_cookie.txt http://localhost/main/auth/users
-curl.exe -i -s -b admin_cookie.txt -X POST http://localhost/main/auth/users -H "Content-Type: application/json" --data "{\"username\":\"bob\",\"password\":\"StrongPassword123\",\"role\":\"writer\"}"
-curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/role -H "Content-Type: application/json" --data "{\"role\":\"admin\"}"
-curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/active -H "Content-Type: application/json" --data "{\"isActive\":false}"
-curl.exe -i -s -b admin_cookie.txt -X PATCH http://localhost/main/auth/users/bob/password -H "Content-Type: application/json" --data "{\"password\":\"NewStrongPassword456\"}"
-curl.exe -i -s -b admin_cookie.txt -X DELETE http://localhost/main/auth/users/bob
-```
-
-Writers can still edit wiki content, but only admins can call `/auth/users` endpoints.
-
-## Admin UI
-
-A small server-rendered admin UI is available for admins at:
-- `/main/admin`
-- `/sandbox/admin`
-
-The page supports:
-- Creating users
-- Changing role
-- Enabling/disabling users
-- Resetting password
-- Deleting users
-
-It uses the same guardrails and audit logging as the admin API.
-
-Safety and audit notes:
-- The service refuses to disable, demote, or delete the last active `admin` account.
-- An admin cannot disable, demote, or delete their own account through admin endpoints.
-- Admin user-management endpoint calls are written to container logs as structured `[ADMIN_AUDIT]` events.
+All admin actions are logged as structured `[ADMIN_AUDIT]` events in container logs.
 
 ## Project Layout
 
 ```
-TW_Hosting/
-	config/
-		sites.yml
-	scripts/
-		generate-config.js
-	Caddyfile               # generated
-	docker-compose.yml      # generated
-	.env.example
-	setup.cmd
-	wiki-container/
-		Dockerfile
-		package.json
-		server.js
-		lib/
-			tw-process.js
-			write-guard.js
-			git-sync.js
+TiddlyHarbor/
+  config/
+    sites.yml             # Wiki definitions and defaults
+  console/
+    server.js             # Management console Express app
+    lib/
+      config.js           # sites.yml read/write
+      docker.js           # Container status and compose operations
+      pages.js            # Console page rendering
+  scripts/
+    generate-config.js    # Generates docker-compose.yml and Caddyfile
+    manage-sites.js       # CLI for site management
+  wiki-container/
+    server.js             # Per-wiki Express app (auth, proxy, git)
+    lib/
+      auth-pages.js       # Login, admin, invite, and reset pages
+      git-sync.js         # Git autosave engine
+      notifications.js    # SMTP email (invites, resets, admin alerts)
+      oauth-config.js     # OAuth provider filtering
+      oauth-strategies.js # Passport GitHub/Google strategies
+      user-store.js       # SQLite user database
+      write-guard.js      # Write-operation auth middleware
+      writer-session.js   # Session cookie management
+  Caddyfile               # Generated — reverse proxy config
+  docker-compose.yml      # Generated — service definitions
+  .env.example            # Template for environment variables
 ```
 
-## Regenerating Config
+## Power Users
 
-1. Edit config/sites.yml
-2. Run node scripts/generate-config.js
-3. Restart docker compose
+### Site Management CLI
+
+The `manage-sites.js` script provides command-line wiki management as an alternative to the console:
+
+```bash
+# List configured wikis
+npm run manage list
+
+# Add a wiki
+npm run manage add my-wiki --domain=my-wiki.example.com
+npm run manage add my-wiki --path=/my-wiki --repo=https://TOKEN@github.com/org/repo.git
+
+# Remove a wiki
+npm run manage remove my-wiki
+```
+
+After CLI changes, regenerate and restart:
+
+```bash
+node scripts/generate-config.js
+docker compose up -d --build
+```
+
+### User Admin CLI
+
+Run user commands inside a wiki container:
+
+```bash
+docker compose exec wiki-main node scripts/user-admin.js list
+docker compose exec wiki-main node scripts/user-admin.js create alice StrongPass123 writer
+docker compose exec wiki-main node scripts/user-admin.js set-password alice NewPass456
+docker compose exec wiki-main node scripts/user-admin.js set-role alice admin
+docker compose exec wiki-main node scripts/user-admin.js disable alice
+docker compose exec wiki-main node scripts/user-admin.js enable alice
+docker compose exec wiki-main node scripts/user-admin.js delete alice
+```
+
+### Admin REST API
+
+Authenticated `admin` sessions can manage users via HTTP:
+
+```bash
+# List users
+curl -s -b cookie.txt http://localhost/main/auth/users
+
+# Create user
+curl -s -b cookie.txt -X POST http://localhost/main/auth/users \
+  -H "Content-Type: application/json" \
+  -d '{"username":"bob","password":"StrongPass123","role":"writer"}'
+
+# Change role / toggle active / reset password / delete
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/role -H "Content-Type: application/json" -d '{"role":"admin"}'
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/active -H "Content-Type: application/json" -d '{"isActive":false}'
+curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/password -H "Content-Type: application/json" -d '{"password":"NewPass456"}'
+curl -s -b cookie.txt -X DELETE http://localhost/main/auth/users/bob
+```
+
+## Documentation
+
+See [Production Deployment Guide](docs/PRODUCTION-DEPLOYMENT.md) for full setup instructions including DNS, OAuth, SMTP, and HTTPS configuration.
