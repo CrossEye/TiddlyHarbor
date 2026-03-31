@@ -54,6 +54,8 @@ const PAGE_STYLES = `
   .btn-primary:hover  { background:#1a5276; }
   .btn-action   { background:#1a3a5c; color:#e8e8e8; }
   .btn-action:hover   { background:#0f2b44; }
+  .btn:disabled { opacity:0.5; cursor:default; }
+  .btn:disabled:hover { background:inherit; }
   .btn-danger   { background:#c0392b; color:#fff; }
   .btn-danger:hover   { background:#922b21; }
   .btn-sm { padding:0.3rem 0.65rem; font-size:0.78rem; }
@@ -138,7 +140,7 @@ function formatDomain(site) {
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
-function renderDashboard(sites, containerStatus, flash) {
+function renderDashboard(sites, containerStatus, flash, needsApply = true) {
   const siteNames = Object.keys(sites);
 
   const rows = siteNames.map((name) => {
@@ -167,7 +169,7 @@ function renderDashboard(sites, containerStatus, flash) {
     <div class="actions-bar">
       <a href="${BASE}/wikis/add" class="btn btn-primary">Add Wiki</a>
       <form method="POST" action="${BASE}/apply">
-        <button type="submit" class="btn btn-action">Apply Changes</button>
+        <button type="submit" class="btn btn-action"${needsApply ? '' : ' disabled title="Configuration matches what was last applied"'}>${needsApply ? 'Apply Changes' : 'Up to date'}</button>
       </form>
     </div>
     <div class="th-card" style="padding:0; overflow:hidden; border-radius:0.6rem;">
@@ -358,10 +360,11 @@ function renderRemoveConfirm(name, site, siteCount) {
 
 // ─── Apply Result ────────────────────────────────────────────────────────────
 
-function renderApplyResult(success, stdout, stderr) {
+function renderApplyResult(success, stdout, stderr, contextMessage = null) {
   const output = [stdout, stderr].filter(Boolean).join('\n').trim() || '(no output)';
   const body = `
     <h1 style="font-size:1.25rem;">Apply Changes</h1>
+    ${contextMessage ? flashHtml(contextMessage, 'success') : ''}
     ${success
       ? '<div class="alert alert-success">Configuration applied successfully.</div>'
       : '<div class="alert alert-error">Apply encountered errors. Check the output below.</div>'}

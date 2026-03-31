@@ -26,6 +26,23 @@ if (!CONSOLE_PASS) {
   process.exit(1);
 }
 
+// ─── Apply tracking ────────────────────────────────────────────────────────
+
+let lastAppliedHash = null;
+
+function hashFile(filePath) {
+  const content = fs.readFileSync(filePath, 'utf8');
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+async function applyAndTrack() {
+  const result = await applyConfig(HOST_PROJECT_DIR);
+  if (result.success) {
+    lastAppliedHash = hashFile(SITES_PATH);
+  }
+  return result;
+}
+
 // ─── App ────────────────────────────────────────────────────────────────────
 
 const app = express();
@@ -82,7 +99,9 @@ app.get('/', async (req, res) => {
     const flash = req.query.msg
       ? { message: req.query.msg, type: req.query.type || 'success' }
       : null;
-    res.send(renderDashboard(config.sites, containerStatus, flash));
+    const currentHash = hashFile(SITES_PATH);
+    const needsApply = lastAppliedHash === null || currentHash !== lastAppliedHash;
+    res.send(renderDashboard(config.sites, containerStatus, flash, needsApply));
   } catch (err) {
     res.status(500).send(`Error loading config: ${err.message}`);
   }
@@ -99,7 +118,7 @@ app.get('/wikis/add', (req, res) => {
 });
 
 // Add wiki — submit
-app.post('/wikis/add', upload.single('import_file'), (req, res) => {
+app.post('/wikis/add', upload.single('import_file'), async (req, res) => {
   try {
     const name = (req.body.name || '').trim().toLowerCase();
     const siteConfig = parseFormToSiteConfig(req.body);
@@ -118,7 +137,9 @@ app.post('/wikis/add', upload.single('import_file'), (req, res) => {
       fs.renameSync(req.file.path, dest);
     }
 
-    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" added.${req.file ? ' Tiddlers will be imported on first start.' : ''}`)}&type=success`);
+    const contextMsg = `Wiki "${name}" added.${req.file ? ' Tiddlers will be imported on first start.' : ''}`;
+    const applyResult = await applyAndTrack();
+    res.send(renderApplyResult(applyResult.success, applyResult.stdout, applyResult.stderr, contextMsg));
   } catch (err) {
     if (req.file) try { fs.unlinkSync(req.file.path); } catch (_) {}
     res.status(500).send(`Error: ${err.message}`);
@@ -143,7 +164,7 @@ app.get('/wikis/:name/edit', (req, res) => {
 });
 
 // Edit wiki — submit
-app.post('/wikis/:name/edit', (req, res) => {
+app.post('/wikis/:name/edit', async (req, res) => {
   try {
     const name = req.params.name;
     const siteConfig = parseFormToSiteConfig(req.body);
@@ -155,7 +176,8 @@ app.post('/wikis/:name/edit', (req, res) => {
       return res.send(renderEditForm(name, { ...site, ...siteConfig }, config.defaults, result.error));
     }
 
-    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" updated.`)}&type=success`);
+    const applyResult = await applyAndTrack();
+    res.send(renderApplyResult(applyResult.success, applyResult.stdout, applyResult.stderr, `Wiki "${name}" updated.`));
   } catch (err) {
     res.status(500).send(`Error: ${err.message}`);
   }
@@ -187,15 +209,18 @@ app.post('/wikis/:name/remove', async (req, res) => {
     const projectName = HOST_PROJECT_DIR.replace(/[\\/]+$/, '').split(/[\\/]/).pop().toLowerCase();
     await stopAndRemoveContainer(projectName, `wiki-${name}`);
 
+    let contextMsg;
     if (req.body.delete_volume === 'yes') {
       const volResult = await deleteVolume(projectName, name);
-      if (!volResult.success) {
-        return res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" removed, but volume deletion failed: ${volResult.stderr}`)}&type=error`);
-      }
-      return res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" and its data permanently deleted.`)}&type=success`);
+      contextMsg = volResult.success
+        ? `Wiki "${name}" and its data permanently deleted.`
+        : `Wiki "${name}" removed, but volume deletion failed: ${volResult.stderr}`;
+    } else {
+      contextMsg = `Wiki "${name}" removed. Data volume preserved.`;
     }
 
-    res.redirect(`${BASE_PATH}/?msg=${encodeURIComponent(`Wiki "${name}" removed. Data volume preserved.`)}&type=success`);
+    const applyResult = await applyAndTrack();
+    res.send(renderApplyResult(applyResult.success, applyResult.stdout, applyResult.stderr, contextMsg));
   } catch (err) {
     res.status(500).send(`Error: ${err.message}`);
   }
@@ -204,7 +229,7 @@ app.post('/wikis/:name/remove', async (req, res) => {
 // Apply changes — regenerate configs and docker compose up
 app.post('/apply', async (req, res) => {
   try {
-    const result = await applyConfig(HOST_PROJECT_DIR);
+    const result = await applyAndTrack();
     res.send(renderApplyResult(result.success, result.stdout, result.stderr));
   } catch (err) {
     res.send(renderApplyResult(false, '', err.message));
