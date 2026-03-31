@@ -8,18 +8,18 @@ A self-hosted multi-wiki platform built on [TiddlyWiki](https://tiddlywiki.com),
 
 ## Features
 
-- **Management Console** — Web UI for adding, editing, and removing wikis, with live container status and one-click config apply
-- **Multi-site hosting** — Run any number of TiddlyWiki instances from a single server, each with its own path or domain
-- **User management** — Per-wiki admin page for creating users, assigning roles, setting emails, and managing access
-- **Invite & password reset** — Email-based user invites and forgot-password flow (when SMTP is configured)
-- **OAuth login** — GitHub and Google sign-in, configurable per wiki
-- **Git autosave** — Write-triggered commits with quiescence and max-interval timers, optional push to remote
-- **Clone from remote** — Wikis can clone from a git repo on first start, with configurable branch
-- **Public read / writer login** — Anonymous visitors get read-only access; write operations require authentication
-- **Tiddler import** — Upload an HTML TiddlyWiki file when creating a wiki to import its tiddlers
-- **HTTPS** — Caddy handles automatic TLS certificate provisioning via Let's Encrypt
+- 🖥️ **Management Console** — Web UI for adding, editing, and removing wikis, with live container status and one-click config apply
+- 📚 **Multi-site hosting** — Run any number of TiddlyWiki instances from a single server, each with its own path or domain
+- 👥 **User management** — Per-wiki admin page for creating users, assigning roles, setting emails, and managing access
+- ✉️ **Invite & password reset** — Email-based user invites and forgot-password flow (when SMTP is configured)
+- 🔑 **OAuth login** — GitHub and Google sign-in, configurable per wiki
+- 💾 **Git autosave** — Write-triggered commits with quiescence and max-interval timers, optional push to remote
+- 📦 **Clone from remote** — Wikis can clone from a git repo on first start, with configurable branch
+- 👁️ **Public read / writer login** — Anonymous visitors get read-only access; write operations require authentication
+- 📥 **Tiddler import** — Upload an HTML TiddlyWiki file when creating a wiki to import its tiddlers
+- 🔒 **HTTPS** — Caddy handles automatic TLS certificate provisioning via Let's Encrypt
 
-## Quick Start
+## 🚀 Quick Start
 
 1. Copy and edit the environment file:
 
@@ -44,7 +44,7 @@ A self-hosted multi-wiki platform built on [TiddlyWiki](https://tiddlywiki.com),
    - Wiki: http://localhost/main/
    - Console: http://localhost/_console/
 
-## Management Console
+## 🖥️ Management Console
 
 The console is a web UI at `/_console/` for managing your TiddlyHarbor instance. It is protected by basic auth (set `CONSOLE_USER` and `CONSOLE_PASS` in `.env`).
 
@@ -58,7 +58,7 @@ From the console you can:
 
 Changes are auto-applied when you add, edit, or remove a wiki. The dashboard shows whether configuration is up to date with the running containers.
 
-## Per-Wiki Admin
+## 👥 Per-Wiki Admin
 
 Each wiki has an admin page at `/<wiki>/admin` (accessible to users with the `admin` role) where you can:
 
@@ -73,7 +73,7 @@ When SMTP is configured, creating a user with an email but no password sends an 
 
 All admin actions are logged as structured `[ADMIN_AUDIT]` events in container logs.
 
-## Project Layout
+## 📁 Project Layout
 
 ```
 TiddlyHarbor/
@@ -104,7 +104,7 @@ TiddlyHarbor/
   .env.example            # Template for environment variables
 ```
 
-## Power Users
+## 🔧 Power Users
 
 ### Site Management CLI
 
@@ -163,6 +163,6 @@ curl -s -b cookie.txt -X PATCH http://localhost/main/auth/users/bob/password -H 
 curl -s -b cookie.txt -X DELETE http://localhost/main/auth/users/bob
 ```
 
-## Documentation
+## 📖 Documentation
 
 See [Production Deployment Guide](docs/PRODUCTION-DEPLOYMENT.md) for full setup instructions including DNS, OAuth, SMTP, and HTTPS configuration.

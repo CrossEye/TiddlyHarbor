@@ -9,7 +9,7 @@ OAuth, and email notifications.
 
 ---
 
-## 1. Prerequisites
+## 📋 1. Prerequisites
 
 - A VPS (Hetzner CX22 ~$6/mo, DigitalOcean $8/mo, or similar)
 - A domain name with DNS access
@@ -36,7 +36,7 @@ sudo ufw enable
 
 ---
 
-## 2. DNS Configuration
+## 🌐 2. DNS Configuration
 
 Point your domain to the server's IP address.
 
@@ -71,7 +71,7 @@ minutes.
 
 ---
 
-## 3. Clone and Configure
+## ⚙️ 3. Clone and Configure
 
 ```bash
 git clone https://github.com/CrossEye/TiddlyHarbor.git
@@ -135,7 +135,7 @@ This creates `docker-compose.yml` and `Caddyfile` from your `sites.yml`.
 
 ---
 
-## 4. OAuth Setup
+## 🔑 4. OAuth Setup
 
 OAuth requires `OAUTH_EXTERNAL_BASE_URL` to be set to your public URL (e.g.,
 `https://wiki.example.com`). If empty, OAuth is disabled and only password login
@@ -198,7 +198,7 @@ sites:
 
 ---
 
-## 5. Email Setup (Optional)
+## ✉️ 5. Email Setup (Optional)
 
 TiddlyHarbor uses SMTP email for:
 
@@ -237,7 +237,7 @@ users must be created with passwords directly.
 
 ---
 
-## 6. Launch
+## 🚀 6. Launch
 
 ```bash
 docker compose up -d --build
@@ -256,7 +256,7 @@ The management console is available at `https://wiki.example.com/_console/`.
 
 ---
 
-## 7. Managing Wikis
+## 📚 7. Managing Wikis
 
 ### Using the Console
 
@@ -305,7 +305,7 @@ allowing users to reset their own passwords via email.
 
 ---
 
-## 8. Backup with Git Push
+## 💾 8. Backup with Git Push
 
 Each wiki's tiddlers directory is a git repository. To push to a remote:
 
@@ -330,7 +330,7 @@ wiki directory is empty. Set `git_branch` to specify which branch to use.
 
 ---
 
-## 9. Updating
+## 🔄 9. Updating
 
 ```bash
 cd TiddlyHarbor
@@ -349,7 +349,7 @@ Or use the console's **Apply Changes** button after pulling.
 
 ---
 
-## 10. Troubleshooting
+## 🔍 10. Troubleshooting
 
 ### Caddy won't start / TLS errors
 
@@ -385,7 +385,7 @@ Or use the console's **Apply Changes** button after pulling.
 
 ---
 
-## Power Users
+## 🔧 Power Users
 
 ### Site Management CLI
 
